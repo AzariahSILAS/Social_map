@@ -2,6 +2,7 @@ import { useEffect, useRef, useImperativeHandle, forwardRef, useState } from 're
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { markersAPI, Marker as MarkerData, photosAPI, Photo } from '../utils/supabase/client';
+const cameraIcon = '/blueicon.png';
 
 mapboxgl.accessToken = 'pk.eyJ1IjoiYXphcmlhaDIwMCIsImEiOiJjbWhrMWVic2kxZXh6MmxweTQ0cWIwZm1iIn0.8VgSBbpgTJCXAcFqWUaoRg';
 
@@ -76,6 +77,38 @@ export const Map = forwardRef<MapRef, MapProps>(({ onPhotoClick }, ref) => {
     marker.current = new mapboxgl.Marker({ color: '#ef4444' })
       .setLngLat(defaultLocation)
       .addTo(mapInstance);
+
+    // Try to get user's current location
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const userLocation: [number, number] = [
+            position.coords.longitude,
+            position.coords.latitude
+          ];
+
+          if (mapInstance) {
+            mapInstance.flyTo({
+              center: userLocation,
+              zoom: 13,
+              essential: true
+            });
+
+            if (marker.current) {
+              marker.current.setLngLat(userLocation);
+            }
+          }
+        },
+        (error) => {
+          console.log('Unable to get user location, using default:', error.message);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    }
 
     // Add click handler to create new markers
     mapInstance.on('click', async (e) => {
@@ -169,13 +202,13 @@ export const Map = forwardRef<MapRef, MapProps>(({ onPhotoClick }, ref) => {
         // Create custom camera icon element
         const el = document.createElement('div');
         el.className = 'camera-marker';
-        el.style.backgroundImage = 'url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMTQgNGgtNGwtMyAzSDB2MTNhMiAyIDAgMCAwIDIgMmgxNmEyIDIgMCAwIDAgMi0yVjdhMiAyIDAgMCAwLTItMmgtM2wtMy0zeiIvPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTMiIHI9IjMiLz48L3N2Zz4=)';
+        el.style.backgroundImage = `url(${cameraIcon})`;
         el.style.width = '40px';
         el.style.height = '40px';
         el.style.backgroundSize = 'contain';
         el.style.backgroundRepeat = 'no-repeat';
         el.style.cursor = 'pointer';
-        el.style.backgroundColor = '#10b981';
+        // el.style.backgroundColor = '#10b981';
         el.style.borderRadius = '50%';
         el.style.padding = '8px';
         el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';

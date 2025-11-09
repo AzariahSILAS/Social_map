@@ -3,9 +3,13 @@
 import { useRef } from 'react';
 import { Map, MapRef } from '@/components/Map';
 import { SearchBar } from '@/components/SearchBar';
+import { Camera as CameraComponent } from '@/components/Camera';
+import { Camera } from 'lucide-react';
+import { useState } from 'react';
 
-export default function Home() {
+export default function App() {
   const mapRef = useRef<MapRef>(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
 
   const handleLocationSelect = (lng: number, lat: number, placeName: string) => {
     mapRef.current?.flyToLocation(lng, lat);
@@ -25,11 +29,20 @@ export default function Home() {
         <Map ref={mapRef} />
       </main>
       
-      <footer className="bg-slate-100 p-3 text-center text-slate-600">
-        <p className="text-sm">
-          Click anywhere on the map to add a marker • Right-click markers to delete
-        </p>
+      <footer className="bg-slate-900 text-white p-4 flex justify-center items-center">
+        <button
+          onClick={() => setIsCameraOpen(true)}
+          className="p-3 bg-white/10 rounded-full hover:bg-white/20 transition-colors"
+          aria-label="Open camera"
+        >
+          <Camera className="w-6 h-6" />
+        </button>
       </footer>
+
+      <CameraComponent 
+        isOpen={isCameraOpen} 
+        onClose={() => setIsCameraOpen(false)} 
+      />
     </div>
   );
 }

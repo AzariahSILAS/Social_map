@@ -1,22 +1,28 @@
 import { useEffect, useRef, useImperativeHandle, forwardRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { markersAPI, Marker as MarkerData } from '../utils/supabase/client';
-
+import { markersAPI, Marker as MarkerData, photosAPI, Photo } from '../utils/supabase/client';
 
 mapboxgl.accessToken = 'pk.eyJ1IjoiYXphcmlhaDIwMCIsImEiOiJjbWhrMWVic2kxZXh6MmxweTQ0cWIwZm1iIn0.8VgSBbpgTJCXAcFqWUaoRg';
 
 export interface MapRef {
   flyToLocation: (lng: number, lat: number) => void;
   requestUserLocation: () => void;
+  reloadPhotos: () => void;
 }
 
-export const Map = forwardRef<MapRef>((props, ref) => {
+interface MapProps {
+  onPhotoClick?: (photoUrl: string) => void;
+}
+
+export const Map = forwardRef<MapRef, MapProps>(({ onPhotoClick }, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const marker = useRef<mapboxgl.Marker | null>(null);
   const savedMarkers = useRef<{ [key: string]: mapboxgl.Marker }>({});
+  const photoMarkers = useRef<{ [key: string]: mapboxgl.Marker }>({});
   const [markers, setMarkers] = useState<MarkerData[]>([]);
+  const [photos, setPhotos] = useState<Photo[]>([]);
 
   // Load markers from Supabase on mount
   useEffect(() => {
@@ -31,6 +37,20 @@ export const Map = forwardRef<MapRef>((props, ref) => {
     
     loadMarkers();
   }, []);
+
+  // Load photos from Supabase on mount
+  useEffect(() => {
+    loadPhotos();
+  }, []);
+
+  const loadPhotos = async () => {
+    try {
+      const data = await photosAPI.getAll();
+      setPhotos(data);
+    } catch (error) {
+      console.error('Failed to load photos:', error);
+    }
+  };
 
   // Initialize map
   useEffect(() => {
@@ -135,6 +155,64 @@ export const Map = forwardRef<MapRef>((props, ref) => {
     });
   }, [markers]);
 
+  // Display photo markers on the map
+  useEffect(() => {
+    if (!map.current) return;
+
+    // Remove old photo markers
+    Object.values(photoMarkers.current).forEach(m => m.remove());
+    photoMarkers.current = {};
+
+    // Add current photo markers with camera icon
+    photos.forEach(photo => {
+      if (map.current) {
+        // Create custom camera icon element
+        const el = document.createElement('div');
+        el.className = 'camera-marker';
+        el.style.backgroundImage = 'url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMTQgNGgtNGwtMyAzSDB2MTNhMiAyIDAgMCAwIDIgMmgxNmEyIDIgMCAwIDAgMi0yVjdhMiAyIDAgMCAwLTItMmgtM2wtMy0zeiIvPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTMiIHI9IjMiLz48L3N2Zz4=)';
+        el.style.width = '40px';
+        el.style.height = '40px';
+        el.style.backgroundSize = 'contain';
+        el.style.backgroundRepeat = 'no-repeat';
+        el.style.cursor = 'pointer';
+        el.style.backgroundColor = '#10b981';
+        el.style.borderRadius = '50%';
+        el.style.padding = '8px';
+        el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+
+        const mapboxMarker = new mapboxgl.Marker({ element: el })
+          .setLngLat([photo.longitude, photo.latitude])
+          .addTo(map.current);
+
+        // Add click handler to view photo
+        el.addEventListener('click', () => {
+          if (onPhotoClick) {
+            onPhotoClick(photo.signedUrl);
+          }
+        });
+
+        // Add right-click handler to delete photo
+        el.addEventListener('contextmenu', async (e) => {
+          e.preventDefault();
+          
+          const confirmDelete = confirm('Delete this photo?');
+          if (!confirmDelete) return;
+
+          try {
+            await photosAPI.delete(photo.id);
+            setPhotos(prev => prev.filter(p => p.id !== photo.id));
+            console.log('Photo deleted successfully:', photo.id);
+          } catch (error) {
+            console.error('Failed to delete photo:', error);
+            alert('Failed to delete photo. Please try again.');
+          }
+        });
+
+        photoMarkers.current[photo.id] = mapboxMarker;
+      }
+    });
+  }, [photos, onPhotoClick]);
+
   useImperativeHandle(ref, () => ({
     flyToLocation: (lng: number, lat: number) => {
       if (map.current) {
@@ -182,6 +260,9 @@ export const Map = forwardRef<MapRef>((props, ref) => {
       } else {
         alert('Geolocation is not supported by your browser');
       }
+    },
+    reloadPhotos: () => {
+      loadPhotos();
     }
   }));
 

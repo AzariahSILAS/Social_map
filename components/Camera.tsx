@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
+import { photosAPI } from '@/utils/supabase/client';
 
 interface CameraProps {
   isOpen: boolean;
   onClose: () => void;
+  onPhotoSaved?: () => void;
 }
 
-export function Camera({ isOpen, onClose }: CameraProps) {
+export function Camera({ isOpen, onClose, onPhotoSaved }: CameraProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -15,10 +17,13 @@ export function Camera({ isOpen, onClose }: CameraProps) {
   const [dragStart, setDragStart] = useState<number | null>(null);
   const [dragDistance, setDragDistance] = useState(0);
   const [isCaptured, setIsCaptured] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       startCamera();
+      getCurrentLocation();
     } else {
       stopCamera();
     }
@@ -27,6 +32,25 @@ export function Camera({ isOpen, onClose }: CameraProps) {
       stopCamera();
     };
   }, [isOpen]);
+
+  const getCurrentLocation = () => {
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setCurrentLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+          alert('Unable to get location. Please enable location services.');
+        }
+      );
+    } else {
+      alert('Geolocation is not supported by your browser.');
+    }
+  };
 
   const startCamera = async () => {
     try {
@@ -70,6 +94,41 @@ export function Camera({ isOpen, onClose }: CameraProps) {
 
   const handleRetake = () => {
     setIsCaptured(false);
+  };
+
+  const handleSavePhoto = async () => {
+    if (!canvasRef.current || !currentLocation) {
+      alert('Unable to save photo. Location not available.');
+      return;
+    }
+
+    setIsUploading(true);
+
+    try {
+      // Convert canvas to base64
+      const base64Data = canvasRef.current.toDataURL('image/jpeg', 0.8);
+      
+      // Upload to Supabase
+      await photosAPI.upload(
+        base64Data,
+        `photo-${Date.now()}.jpg`,
+        currentLocation.lat,
+        currentLocation.lng
+      );
+
+      // Notify parent component
+      if (onPhotoSaved) {
+        onPhotoSaved();
+      }
+
+      // Close camera
+      onClose();
+    } catch (error) {
+      console.error('Error saving photo:', error);
+      alert('Failed to save photo. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -174,14 +233,11 @@ export function Camera({ isOpen, onClose }: CameraProps) {
               Retake
             </button>
             <button
-              onClick={() => {
-                // TODO: Handle save/upload photo
-                console.log('Photo captured!');
-                onClose();
-              }}
-              className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              onClick={handleSavePhoto}
+              disabled={isUploading}
+              className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Use Photo
+              {isUploading ? 'Saving...' : 'Use Photo'}
             </button>
           </>
         )}

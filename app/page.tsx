@@ -1,18 +1,28 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { Map, MapRef } from '@/components/Map';
 import { SearchBar } from '@/components/SearchBar';
 import { Camera as CameraComponent } from '@/components/Camera';
+import { PhotoViewer } from '@/components/PhotoViewer';
 import { Camera } from 'lucide-react';
-import { useState } from 'react';
 
 export default function App() {
   const mapRef = useRef<MapRef>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
 
   const handleLocationSelect = (lng: number, lat: number, placeName: string) => {
     mapRef.current?.flyToLocation(lng, lat);
+  };
+
+  const handlePhotoSaved = () => {
+    // Reload photos on the map after a new photo is saved
+    mapRef.current?.reloadPhotos();
+  };
+
+  const handlePhotoClick = (photoUrl: string) => {
+    setSelectedPhotoUrl(photoUrl);
   };
 
   return (
@@ -26,7 +36,7 @@ export default function App() {
           <SearchBar onLocationSelect={handleLocationSelect} />
         </div>
         
-        <Map ref={mapRef} />
+        <Map ref={mapRef} onPhotoClick={handlePhotoClick} />
       </main>
       
       <footer className="bg-slate-900 text-white p-4 flex justify-center items-center">
@@ -41,7 +51,13 @@ export default function App() {
 
       <CameraComponent 
         isOpen={isCameraOpen} 
-        onClose={() => setIsCameraOpen(false)} 
+        onClose={() => setIsCameraOpen(false)}
+        onPhotoSaved={handlePhotoSaved}
+      />
+
+      <PhotoViewer 
+        photoUrl={selectedPhotoUrl}
+        onClose={() => setSelectedPhotoUrl(null)}
       />
     </div>
   );

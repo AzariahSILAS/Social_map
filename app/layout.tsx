@@ -23,6 +23,11 @@ export const metadata = {
       { rel: "apple-touch-icon", url: "/apple-touch-icon.png", sizes: "180x180" },
     ],
   },
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    viewportFit: "cover",  // <- important for iOS safe areas
+  },
 };
 
 export default function RootLayout({

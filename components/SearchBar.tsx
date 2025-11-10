@@ -1,6 +1,8 @@
-import { useState } from 'react';
-import { Input } from '@/components/ui/input';
-import { Search } from 'lucide-react';
+"use client";
+
+import { useState } from "react";
+import { Input } from "@/components/ui/input";
+import { Search } from "lucide-react";
 
 interface SearchBarProps {
   onLocationSelect: (lng: number, lat: number, placeName: string) => void;
@@ -12,28 +14,30 @@ interface SearchResult {
   center: [number, number];
 }
 
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!;
+
 export function SearchBar({ onLocationSelect }: SearchBarProps) {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const searchLocation = async (searchQuery: string) => {
-    if (!searchQuery.trim()) {
+  const searchLocation = async (q: string) => {
+    const trimmed = q.trim();
+    if (!trimmed) {
       setResults([]);
       return;
     }
 
     setIsLoading(true);
     try {
-      const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
-          searchQuery
-        )}.json?access_token=pk.eyJ1IjoiYXphcmlhaDIwMCIsImEiOiJjbWhrMWVic2kxZXh6MmxweTQ0cWIwZm1iIn0.8VgSBbpgTJCXAcFqWUaoRg&limit=5`
-      );
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+        trimmed
+      )}.json?access_token=${MAPBOX_TOKEN}&limit=5`;
+      const response = await fetch(url);
       const data = await response.json();
-      setResults(data.features || []);
-    } catch (error) {
-      console.error('Error searching location:', error);
+      setResults((data?.features ?? []) as SearchResult[]);
+    } catch (err) {
+      console.error("Error searching location:", err);
       setResults([]);
     } finally {
       setIsLoading(false);
@@ -43,7 +47,7 @@ export function SearchBar({ onLocationSelect }: SearchBarProps) {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setQuery(value);
-    searchLocation(value);
+    void searchLocation(value);
   };
 
   const handleSelectLocation = (result: SearchResult) => {
@@ -65,7 +69,7 @@ export function SearchBar({ onLocationSelect }: SearchBarProps) {
           className="pl-10 bg-white shadow-lg"
         />
       </div>
-      
+
       {results.length > 0 && (
         <div className="absolute top-full mt-2 w-full bg-white rounded-lg shadow-lg border border-slate-200 max-h-64 overflow-y-auto z-10">
           {results.map((result) => (
@@ -79,7 +83,7 @@ export function SearchBar({ onLocationSelect }: SearchBarProps) {
           ))}
         </div>
       )}
-      
+
       {isLoading && (
         <div className="absolute top-full mt-2 w-full bg-white rounded-lg shadow-lg border border-slate-200 px-4 py-3">
           <p className="text-slate-500">Searching...</p>

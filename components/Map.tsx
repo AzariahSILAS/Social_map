@@ -1,10 +1,11 @@
+"use client";
 import { useEffect, useRef, useImperativeHandle, forwardRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { markersAPI, Marker as MarkerData, photosAPI, Photo } from '../utils/supabase/client';
 const cameraIcon = '/blueicon.png';
+mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!;
 
-mapboxgl.accessToken = 'pk.eyJ1IjoiYXphcmlhaDIwMCIsImEiOiJjbWhrMWVic2kxZXh6MmxweTQ0cWIwZm1iIn0.8VgSBbpgTJCXAcFqWUaoRg';
 
 export interface MapRef {
   flyToLocation: (lng: number, lat: number) => void;

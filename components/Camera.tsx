@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
-import { photosAPI } from '@/utils/supabase/client';
+import { useEffect, useRef, useState } from "react";
+import { X, RefreshCcw } from "lucide-react";
+import { photosAPI } from "@/utils/supabase/client"; // keep this path if that's your file
 
 interface CameraProps {
   isOpen: boolean;
@@ -13,102 +13,136 @@ export function Camera({ isOpen, onClose, onPhotoSaved }: CameraProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  
+
   const [dragStart, setDragStart] = useState<number | null>(null);
   const [dragDistance, setDragDistance] = useState(0);
   const [isCaptured, setIsCaptured] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
+  const [useFront, setUseFront] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
 
+  // ---------- lifecycle ----------
   useEffect(() => {
-    if (isOpen) {
-      startCamera();
-      getCurrentLocation();
-    } else {
+    if (!isOpen) {
       stopCamera();
+      return;
     }
+
+    startCamera();
+    getCurrentLocation();
+
+    const onEsc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onHide = () => stopCamera(); // safety when tab/app is hidden
+    document.addEventListener("keydown", onEsc);
+    document.addEventListener("visibilitychange", onHide);
 
     return () => {
+      document.removeEventListener("keydown", onEsc);
+      document.removeEventListener("visibilitychange", onHide);
       stopCamera();
     };
-  }, [isOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, useFront]);
 
+  // ---------- geolocation ----------
   const getCurrentLocation = () => {
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setCurrentLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-          });
-        },
-        (error) => {
-          console.error('Error getting location:', error);
-          alert('Unable to get location. Please enable location services.');
-        }
-      );
-    } else {
-      alert('Geolocation is not supported by your browser.');
-    }
+    if (!("geolocation" in navigator)) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setCurrentLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (error) => console.warn("Location error:", error)
+    );
   };
 
+  // ---------- camera control ----------
   const startCamera = async () => {
+    if (isStarting) return;
+    setIsStarting(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
+      // Try preferred camera first
+      const facingMode = useFront ? "user" : "environment";
+      const constraints: MediaStreamConstraints = {
         audio: false,
-      });
+        video: {
+          facingMode,                    // spec-compliant
+          width: { ideal: 1920 },        // better clarity if available
+          height: { ideal: 1080 },
+        },
+      };
+
+      let stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      // Some iOS devices ignore facingMode; if wrong camera, try "exact" fallback
+      const track = stream.getVideoTracks()[0];
+      const settings = track.getSettings();
+      const gotFront = settings.facingMode === "user";
+      const gotBack = settings.facingMode === "environment";
+      if ((useFront && !gotFront) || (!useFront && !gotBack)) {
+        try {
+          track.stop();
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: { facingMode: { exact: facingMode as "user" | "environment" } },
+          });
+        } catch {
+          // keep the first stream if exact fails
+        }
+      }
+
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {});
       }
-    } catch (error) {
-      console.error('Error accessing camera:', error);
-      alert('Unable to access camera. Please check permissions.');
+
+      // Reset UI state when starting
+      setIsCaptured(false);
+    } catch (err) {
+      console.error("getUserMedia error:", err);
+      alert("Unable to access camera. Check permissions and try again.");
+    } finally {
+      setIsStarting(false);
     }
   };
 
   const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
+    if (!streamRef.current) return;
+    try {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+    } catch {}
+    streamRef.current = null;
     setIsCaptured(false);
   };
 
+  // ---------- capture / save ----------
   const handleCapture = () => {
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(video, 0, 0);
-        setIsCaptured(true);
-      }
-    }
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+    const { videoWidth, videoHeight } = video;
+
+    // Match canvas to actual sensor aspect (avoids squashed images)
+    canvas.width = videoWidth;
+    canvas.height = videoHeight;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, videoWidth, videoHeight);
+    setIsCaptured(true);
   };
 
-  const handleRetake = () => {
-    setIsCaptured(false);
-  };
+  const handleRetake = () => setIsCaptured(false);
 
   const handleSavePhoto = async () => {
-    if (!canvasRef.current || !currentLocation) {
-      alert('Unable to save photo. Location not available.');
+    const canvas = canvasRef.current;
+    if (!canvas || !currentLocation) {
+      alert("Location not available. Please enable location and try again.");
       return;
     }
 
     setIsUploading(true);
-
     try {
-      // Convert canvas to base64
-      const base64Data = canvasRef.current.toDataURL('image/jpeg', 0.8);
-      
-      // Upload to Supabase
+      const base64Data = canvas.toDataURL("image/jpeg", 0.85);
       await photosAPI.upload(
         base64Data,
         `photo-${Date.now()}.jpg`,
@@ -116,62 +150,34 @@ export function Camera({ isOpen, onClose, onPhotoSaved }: CameraProps) {
         currentLocation.lng
       );
 
-      // Notify parent component
-      if (onPhotoSaved) {
-        onPhotoSaved();
-      }
-
-      // Close camera
+      onPhotoSaved?.();
       onClose();
     } catch (error) {
-      console.error('Error saving photo:', error);
-      alert('Failed to save photo. Please try again.');
+      console.error("Save error:", error);
+      alert("Failed to save photo. Please try again.");
     } finally {
       setIsUploading(false);
     }
   };
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setDragStart(e.touches[0].clientY);
-  };
-
+  // ---------- drag-to-close ----------
+  const handleTouchStart = (e: React.TouchEvent) => setDragStart(e.touches[0].clientY);
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (dragStart !== null) {
-      const currentY = e.touches[0].clientY;
-      const distance = currentY - dragStart;
-      if (distance > 0) {
-        setDragDistance(distance);
-      }
-    }
+    if (dragStart === null) return;
+    const d = e.touches[0].clientY - dragStart;
+    if (d > 0) setDragDistance(d);
   };
-
-  const handleTouchEnd = () => {
-    if (dragDistance > 100) {
-      onClose();
-    }
+  const endDrag = () => {
+    if (dragDistance > 100) onClose();
     setDragStart(null);
     setDragDistance(0);
   };
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setDragStart(e.clientY);
-  };
-
+  const handleMouseDown = (e: React.MouseEvent) => setDragStart(e.clientY);
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (dragStart !== null) {
-      const distance = e.clientY - dragStart;
-      if (distance > 0) {
-        setDragDistance(distance);
-      }
-    }
-  };
-
-  const handleMouseUp = () => {
-    if (dragDistance > 100) {
-      onClose();
-    }
-    setDragStart(null);
-    setDragDistance(0);
+    if (dragStart === null) return;
+    const d = e.clientY - dragStart;
+    if (d > 0) setDragDistance(d);
   };
 
   if (!isOpen) return null;
@@ -179,65 +185,81 @@ export function Camera({ isOpen, onClose, onPhotoSaved }: CameraProps) {
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 bg-black z-50 flex flex-col"
+      className="fixed inset-0 z-50 flex flex-col bg-black"
       style={{
         transform: `translateY(${dragDistance}px)`,
-        transition: dragStart === null ? 'transform 0.3s ease-out' : 'none',
+        transition: dragStart === null ? "transform 0.25s ease-out" : "none",
       }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
+      onTouchEnd={endDrag}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      onMouseUp={endDrag}
+      onMouseLeave={endDrag}
     >
-      {/* Header with close button */}
-      <div className="absolute top-0 left-0 right-0 z-10 p-4 flex justify-between items-center bg-gradient-to-b from-black/50 to-transparent">
-        <div className="w-10 h-1 bg-white/50 rounded-full mx-auto" />
+      {/* Top bar */}
+      <div className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between p-3">
+        <div className="w-10 h-1 rounded-full bg-white/40 mx-auto" />
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 bg-black/50 rounded-full p-2 text-white hover:bg-black/70 transition-colors"
+          className="absolute right-3 top-3 rounded-full bg-black/50 p-2 text-white transition-colors hover:bg-black/70"
+          aria-label="Close"
         >
-          <X className="w-6 h-6" />
+          <X className="h-6 w-6" />
         </button>
       </div>
 
-      {/* Camera view */}
-      <div className="flex-1 relative overflow-hidden">
+      {/* Preview */}
+      <div className="relative flex-1 overflow-hidden">
         <video
           ref={videoRef}
           autoPlay
+          muted
           playsInline
-          className={`w-full h-full object-cover ${isCaptured ? 'hidden' : ''}`}
+          className={`h-full w-full object-cover ${isCaptured ? "hidden" : ""}`}
         />
         <canvas
           ref={canvasRef}
-          className={`w-full h-full object-cover ${isCaptured ? '' : 'hidden'}`}
+          className={`h-full w-full object-cover ${isCaptured ? "" : "hidden"}`}
         />
       </div>
 
       {/* Controls */}
-      <div className="bg-black/50 p-6 flex justify-center items-center gap-4">
+      <div className="flex items-center justify-center gap-4 bg-black/60 p-5">
         {!isCaptured ? (
-          <button
-            onClick={handleCapture}
-            className="w-16 h-16 rounded-full bg-white border-4 border-gray-300 hover:bg-gray-100 transition-colors"
-          />
+          <>
+            <button
+              onClick={() => setUseFront((v) => !v)}
+              disabled={isStarting}
+              className="rounded-lg bg-white/15 px-4 py-2 text-white backdrop-blur transition-colors hover:bg-white/25 disabled:opacity-50"
+              aria-label="Flip camera"
+              title="Flip camera"
+            >
+              <RefreshCcw className="h-5 w-5" />
+            </button>
+
+            <button
+              onClick={handleCapture}
+              disabled={isStarting}
+              className="h-16 w-16 rounded-full border-4 border-gray-300 bg-white transition-colors hover:bg-gray-100 disabled:opacity-50"
+              aria-label="Capture"
+            />
+          </>
         ) : (
           <>
             <button
               onClick={handleRetake}
-              className="px-6 py-3 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors"
+              className="rounded-lg bg-white/20 px-5 py-3 text-white transition-colors hover:bg-white/30"
             >
               Retake
             </button>
             <button
               onClick={handleSavePhoto}
               disabled={isUploading}
-              className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-lg bg-blue-500 px-5 py-3 text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isUploading ? 'Saving...' : 'Use Photo'}
+              {isUploading ? "Saving..." : "Use Photo"}
             </button>
           </>
         )}

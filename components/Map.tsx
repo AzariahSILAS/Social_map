@@ -4,7 +4,7 @@ import { useEffect, useRef, useImperativeHandle, forwardRef, useState } from "re
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { photosAPI, Photo } from "@/utils/supabase/client"; // <- ensure this path matches your file
-const cameraIcon = "/blueicon.png";
+const photoIcon = "/gallery.png";
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 if (!TOKEN) {
@@ -118,10 +118,11 @@ export const Map = forwardRef<MapRef, MapProps>(({ onPhotoClick }, ref) => {
 
       const el = document.createElement("div");
       el.className = "camera-marker";
-      el.style.backgroundImage = `url(${cameraIcon})`;
+      el.style.backgroundImage = `url(${photoIcon})`;
       el.style.width = "40px";
       el.style.height = "40px";
-      el.style.backgroundSize = "contain";
+      el.style.backgroundSize = "80%";
+      el.style.backgroundPosition = "center";
       el.style.backgroundRepeat = "no-repeat";
       el.style.cursor = "pointer";
       el.style.borderRadius = "50%";

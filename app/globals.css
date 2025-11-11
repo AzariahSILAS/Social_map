@@ -151,3 +151,8 @@ html { font-size: var(--font-size); }
 /* Safe area helpers (for iOS notches / Android gesture bar) */
 .safe-top    { padding-top: max(1rem, env(safe-area-inset-top)); }
 .safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+
+.mapboxgl-ctrl-top-right {
+  top: 60px;   /* below the search bar */
+  right: 8px;
+}

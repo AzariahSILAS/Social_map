@@ -38,7 +38,7 @@ export default function Page() {
 
         {/* Floating Search Bar */}
         <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 w-full max-w-md px-3 safe-top">
-          <div className="pointer-events-auto">
+          <div className="pointer-events-auto mx-auto max-w-[calc(100vw-96px)] sm:max-w-md">
             <SearchBar onLocationSelect={handleLocationSelect} />
           </div>
         </div>

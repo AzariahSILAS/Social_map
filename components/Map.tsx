@@ -3,12 +3,12 @@
 import { useEffect, useRef, useImperativeHandle, forwardRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { photosAPI, Photo } from "@/utils/supabase/client"; // ensure this path matches your file
+import { photosAPI, Photo } from "@/utils/supabase/client"; // <- ensure this path matches your file
 const cameraIcon = "/blueicon.png";
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 if (!TOKEN) {
-  console.warn("⚠️ Missing NEXT_PUBLIC_MAPBOX_TOKEN. Check your .env.local and restart dev server.");
+  console.warn("⚠️ Missing NEXT_PUBLIC_MAPBOX_TOKEN. Add NEXT_PUBLIC_MAPBOX_TOKEN to .env.local and restart.");
 }
 mapboxgl.accessToken = TOKEN;
 
@@ -26,13 +26,13 @@ export const Map = forwardRef<MapRef, MapProps>(({ onPhotoClick }, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
 
-  // Optional: a movable marker to show the "current selection"/search result
+  // Optional: a movable marker that indicates "current focus" (e.g., after a search)
   const focusMarker = useRef<mapboxgl.Marker | null>(null);
 
-  const photoMarkers = useRef<{ [key: string]: mapboxgl.Marker }>({});
+  const photoMarkers = useRef<Record<string, mapboxgl.Marker>>({});
   const [photos, setPhotos] = useState<Photo[]>([]);
 
-  // Load photos
+  // --- Load photos from your serverless function / KV store ---
   const loadPhotos = async () => {
     try {
       const data = await photosAPI.getAll();
@@ -46,7 +46,7 @@ export const Map = forwardRef<MapRef, MapProps>(({ onPhotoClick }, ref) => {
     void loadPhotos();
   }, []);
 
-  // Init map (no add-on-click handlers)
+  // --- Initialize the map (no click-to-add-marker handler) ---
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
 
@@ -60,14 +60,29 @@ export const Map = forwardRef<MapRef, MapProps>(({ onPhotoClick }, ref) => {
     });
 
     const m = map.current;
-    m.addControl(new mapboxgl.NavigationControl(), "top-right");
 
-    // A red focus marker you can move via ref methods (not user-added)
+    // 🧭 Compass only (no zoom) — top-right
+    m.addControl(
+      new mapboxgl.NavigationControl({ showZoom: false, showCompass: true }),
+      "top-right"
+    );
+
+    // 📍 "Go to my current location" button — top-right
+    m.addControl(
+      new mapboxgl.GeolocateControl({
+        positionOptions: { enableHighAccuracy: true },
+        trackUserLocation: false, // set true if you want follow mode
+        showUserLocation: true,
+      }),
+      "top-right"
+    );
+
+    // A red search/focus marker you move via APIs (not added by user)
     focusMarker.current = new mapboxgl.Marker({ color: "#ef4444" })
       .setLngLat(defaultCenter)
       .addTo(m);
 
-    // Try user geolocation (no marker creation)
+    // Try to center on user once (no marker creation here)
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -82,20 +97,22 @@ export const Map = forwardRef<MapRef, MapProps>(({ onPhotoClick }, ref) => {
       );
     }
 
+    // Cleanup on unmount
     return () => {
       m.remove();
       map.current = null;
     };
   }, []);
 
-  // Render photo markers only
+  // --- Render photo markers only ---
   useEffect(() => {
     if (!map.current) return;
 
-    // clear existing
+    // Remove old markers
     Object.values(photoMarkers.current).forEach((mk) => mk.remove());
     photoMarkers.current = {};
 
+    // Add current ones
     photos.forEach((photo) => {
       if (!map.current) return;
 
@@ -111,13 +128,14 @@ export const Map = forwardRef<MapRef, MapProps>(({ onPhotoClick }, ref) => {
       el.style.padding = "8px";
       el.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
 
-      // Prevent map click/move handlers from ever firing from this element
+      // Prevent map-level handlers from triggering through the marker element
       el.addEventListener("click", (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
         onPhotoClick?.(photo.signedUrl);
       });
 
+      // Right-click delete
       el.addEventListener("contextmenu", async (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
@@ -140,6 +158,7 @@ export const Map = forwardRef<MapRef, MapProps>(({ onPhotoClick }, ref) => {
     });
   }, [photos, onPhotoClick]);
 
+  // --- Expose a couple of imperative methods to the parent ---
   useImperativeHandle(ref, () => ({
     flyToLocation: (lng: number, lat: number) => {
       if (!map.current) return;

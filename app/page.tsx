@@ -1,18 +1,57 @@
-'use client';
+"use client";
 
-import { useRef, useState } from 'react';
-import { Map, type MapRef } from '@/components/Map';
-import { SearchBar } from '@/components/SearchBar';
-import { Camera as CameraIcon } from 'lucide-react';
-import { Camera as CameraComponent } from '@/components/Camera';
-import { PhotoViewer } from '@/components/PhotoViewer';
+import { useRef, useState, useEffect } from "react";
+import type { User } from "@supabase/supabase-js";
+import { useRouter } from "next/navigation";
 
-export default function Page() {
+import { Map, MapRef } from "@/components/Map";
+import { SearchBar } from "@/components/SearchBar";
+import { Camera as CameraComponent } from "@/components/Camera";
+import { PhotoViewer } from "@/components/PhotoViewer";
+import { supabase } from "@/utils/supabase/client";
+
+import { AppHeader } from "@/components/AppHeader";
+import { AppFooter } from "@/components/AppFooter";
+
+export default function HomePage() {
+  const router = useRouter();
+
   const mapRef = useRef<MapRef>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
 
-  const handleLocationSelect = (lng: number, lat: number) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Load current user and subscribe to auth changes
+  useEffect(() => {
+    let mounted = true;
+
+    const loadUser = async () => {
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (!mounted) return;
+        setUser(data.user ?? null);
+      } finally {
+        if (mounted) setAuthLoading(false);
+      }
+    };
+
+    void loadUser();
+
+    const { data: subscription } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUser(session?.user ?? null);
+      }
+    );
+
+    return () => {
+      mounted = false;
+      subscription.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLocationSelect = (lng: number, lat: number, _placeName: string) => {
     mapRef.current?.flyToLocation(lng, lat);
   };
 
@@ -20,49 +59,53 @@ export default function Page() {
     mapRef.current?.reloadPhotos();
   };
 
+  const handlePhotoClick = (photoUrl: string) => {
+    setSelectedPhotoUrl(photoUrl);
+  };
+
+  const handleOpenCamera = () => {
+    if (!user) {
+      router.push("/auth");
+      return;
+    }
+    setIsCameraOpen(true);
+  };
+
+  const handleFeedClick = () => {
+    // later: router.push("/feed")
+    console.log("Feed clicked (placeholder)");
+  };
+
   return (
-    <div className="relative flex h-dvh flex-col bg-background">
-      {/* Header */}
-      <header className="bg-slate-900 text-white px-4 py-3 shadow-md">
-        <h1 className="text-center text-base font-medium">Social Map</h1>
-      </header>
+    <div className="w-full h-screen flex flex-col bg-slate-950 text-slate-50">
+      <AppHeader
+        isLoading={authLoading}
+        user={user}
+        onClickLogin={() => router.push("/auth")}
+        onClickProfile={() => router.push("/profile")}
 
-      {/* Map section */}
-      <main className="relative flex-1 min-h-0">
-        <div className="absolute inset-0">
-          <Map
-            ref={mapRef}
-            onPhotoClick={(url) => setSelectedPhotoUrl(url)}
-          />
+      />
+
+      <main className="flex-1 relative">
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-full px-4 flex justify-center">
+          <SearchBar onLocationSelect={handleLocationSelect} />
         </div>
 
-        {/* Floating Search Bar */}
-        <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 w-full max-w-md px-3 safe-top">
-          <div className="pointer-events-auto mx-auto max-w-[calc(100vw-96px)] sm:max-w-md">
-            <SearchBar onLocationSelect={handleLocationSelect} />
-          </div>
-        </div>
+        <Map ref={mapRef} onPhotoClick={handlePhotoClick} />
       </main>
 
-      {/* Footer — matches old dark look */}
-      <footer className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-center border-t border-slate-800 bg-slate-900 px-4 py-3 safe-bottom">
-        <button
-          onClick={() => setIsCameraOpen(true)}
-          className="rounded-full bg-white/10 p-3 text-white transition-colors hover:bg-white/20"
-          aria-label="Open camera"
-        >
-          <CameraIcon className="h-6 w-6" />
-        </button>
-      </footer>
+      <AppFooter
+        isLoggedIn={!!user}
+        onClickFeed={handleFeedClick}
+        onClickCamera={handleOpenCamera}
+      />
 
-      {/* Camera overlay */}
       <CameraComponent
         isOpen={isCameraOpen}
         onClose={() => setIsCameraOpen(false)}
         onPhotoSaved={handlePhotoSaved}
       />
 
-      {/* Photo viewer overlay */}
       <PhotoViewer
         photoUrl={selectedPhotoUrl}
         onClose={() => setSelectedPhotoUrl(null)}

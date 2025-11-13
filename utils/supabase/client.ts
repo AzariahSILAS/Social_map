@@ -1,25 +1,21 @@
+// utils/supabase/client.ts
+"use client";
+
 import { createClient } from "@supabase/supabase-js";
 
-// --- Environment variables --- //
+// These come from .env.local
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const edgeFunctionName =
-  process.env.NEXT_PUBLIC_EDGE_FUNCTION_NAME ?? "make-server-ac2b2b01";
+const edgeFunctionName = process.env.NEXT_PUBLIC_EDGE_FUNCTION_NAME!;
 
-// Warn if missing keys
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn("⚠️ Missing Supabase environment variables. Check .env.local.");
+  console.warn("⚠️ Supabase URL or ANON key missing. Check .env.local");
 }
 
-// Supabase client (browser safe)
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// URL to your Supabase Edge Function
 const serverUrl = `${supabaseUrl}/functions/v1/${edgeFunctionName}`;
 
-// -----------------------------
-//        Types
-// -----------------------------
 export interface Marker {
   id: string;
   longitude: number;
@@ -37,9 +33,84 @@ export interface Photo {
   created_at: string;
 }
 
-// -----------------------------
-//        Marker API
-// -----------------------------
+
+/** ---------- AUTH + PROFILE HELPERS ---------- */
+
+export async function signUpWithEmail(email: string, password: string) {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function signInWithEmail(email: string, password: string) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function signOut() {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+}
+
+export async function getCurrentUser() {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) throw error;
+  return data.user ?? null;
+}
+
+export interface Profile {
+  id: string;
+  username: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  created_at: string;
+}
+
+export const profilesAPI = {
+  async getProfile(userId: string): Promise<Profile | null> {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return (data as Profile) ?? null;
+  },
+
+  async getMyProfile(): Promise<Profile | null> {
+    const {
+      data: { user },
+      error: userErr,
+    } = await supabase.auth.getUser();
+
+    if (userErr || !user) return null;
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error fetching profile:", error);
+      throw error;
+    }
+
+    return (data as Profile) ?? null;
+  },
+};
+
+/** ---------- MARKERS API (still here if you want later) ---------- */
+
 export const markersAPI = {
   async getAll(): Promise<Marker[]> {
     const { data, error } = await supabase
@@ -52,14 +123,10 @@ export const markersAPI = {
       throw error;
     }
 
-    return data || [];
+    return (data as Marker[]) || [];
   },
 
-  async add(
-    longitude: number,
-    latitude: number,
-    label?: string
-  ): Promise<Marker> {
+  async add(longitude: number, latitude: number, label?: string): Promise<Marker> {
     const { data, error } = await supabase
       .from("markers")
       .insert([{ longitude, latitude, label: label || null }])
@@ -71,7 +138,7 @@ export const markersAPI = {
       throw error;
     }
 
-    return data;
+    return data as Marker;
   },
 
   async delete(id: string): Promise<void> {
@@ -84,15 +151,14 @@ export const markersAPI = {
   },
 };
 
-// -----------------------------
-//        Photo API
-// -----------------------------
+/** ---------- PHOTOS API (same behavior as before) ---------- */
+
 export const photosAPI = {
   async upload(
     base64Data: string,
     filename: string,
     latitude: number,
-    longitude: number
+    longitude: number,
   ): Promise<Photo> {
     const response = await fetch(`${serverUrl}/photos/upload`, {
       method: "POST",
@@ -109,12 +175,17 @@ export const photosAPI = {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Failed to upload photo");
+      let message = "Failed to upload photo";
+      try {
+        const error = await response.json();
+        if (error?.error) message = error.error;
+      } catch {
+        // ignore JSON parse error
+      }
+      throw new Error(message);
     }
 
     const data = await response.json();
-
     return {
       id: data.photoId,
       filePath: "",
@@ -125,52 +196,27 @@ export const photosAPI = {
     };
   },
 
-    // Get all photos
   async getAll(): Promise<Photo[]> {
-    const url = `${serverUrl}/photos`;
-    console.log("📸 Fetching photos from:", url);
-
-    let response: Response;
-
-    try {
-      response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${supabaseAnonKey}`,
-        },
-      });
-    } catch (networkError) {
-      console.error("🌐 Network error while fetching photos:", networkError);
-      throw new Error("Network error while fetching photos");
-    }
-
-    const rawBody = await response.text();
-    console.log("📸 Photos response:", {
-      status: response.status,
-      ok: response.ok,
-      body: rawBody,
+    const response = await fetch(`${serverUrl}/photos`, {
+      headers: {
+        Authorization: `Bearer ${supabaseAnonKey}`,
+      },
     });
 
     if (!response.ok) {
-      // Try to parse JSON error if possible
+      let message = "Failed to fetch photos";
       try {
-        const errorJson = JSON.parse(rawBody);
-        throw new Error(errorJson.error || "Failed to fetch photos");
+        const error = await response.json();
+        if (error?.error) message = error.error;
       } catch {
-        throw new Error(`Failed to fetch photos (status ${response.status})`);
+        // ignore JSON parse error
       }
+      throw new Error(`${message} (status ${response.status})`);
     }
 
-    let data: any;
-    try {
-      data = JSON.parse(rawBody);
-    } catch (jsonErr) {
-      console.error("❌ Failed to parse photos JSON:", jsonErr);
-      throw new Error("Invalid JSON while fetching photos");
-    }
-
+    const data = await response.json();
     return (data.photos as Photo[]) || [];
   },
-
 
   async delete(id: string): Promise<void> {
     const response = await fetch(`${serverUrl}/photos/${id}`, {
@@ -181,8 +227,14 @@ export const photosAPI = {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Failed to delete photo");
+      let message = "Failed to delete photo";
+      try {
+        const error = await response.json();
+        if (error?.error) message = error.error;
+      } catch {
+        // ignore
+      }
+      throw new Error(message);
     }
   },
 };

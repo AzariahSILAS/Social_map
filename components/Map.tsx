@@ -3,12 +3,13 @@
 import { useEffect, useRef, useImperativeHandle, forwardRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { photosAPI, Photo } from "@/utils/supabase/client"; // <- ensure this path matches your file
+import { photosAPI, type Photo } from "@/utils/supabase/client";
+
 const photoIcon = "/gallery.png";
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 if (!TOKEN) {
-  console.warn("⚠️ Missing NEXT_PUBLIC_MAPBOX_TOKEN. Add NEXT_PUBLIC_MAPBOX_TOKEN to .env.local and restart.");
+  console.warn("⚠️ Missing NEXT_PUBLIC_MAPBOX_TOKEN. Add it to .env.local and restart the dev server.");
 }
 mapboxgl.accessToken = TOKEN;
 
@@ -26,19 +27,20 @@ export const Map = forwardRef<MapRef, MapProps>(({ onPhotoClick }, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
 
-  // Optional: a movable marker that indicates "current focus" (e.g., after a search)
+  // Red “focus” marker moved via the exposed ref methods
   const focusMarker = useRef<mapboxgl.Marker | null>(null);
 
+  // Photo markers keyed by photo id
   const photoMarkers = useRef<Record<string, mapboxgl.Marker>>({});
   const [photos, setPhotos] = useState<Photo[]>([]);
 
-  // --- Load photos from your serverless function / KV store ---
+  // ---- data ----
   const loadPhotos = async () => {
     try {
       const data = await photosAPI.getAll();
       setPhotos(data);
-    } catch (error) {
-      console.error("Failed to load photos:", error);
+    } catch (err) {
+      console.error("Failed to load photos:", err);
     }
   };
 
@@ -46,43 +48,42 @@ export const Map = forwardRef<MapRef, MapProps>(({ onPhotoClick }, ref) => {
     void loadPhotos();
   }, []);
 
-  // --- Initialize the map (no click-to-add-marker handler) ---
+  // ---- map init ----
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
 
-    const defaultCenter: [number, number] = [-74.5, 40]; // fallback (NY)
+    const defaultCenter: [number, number] = [-74.5, 40]; // NYC fallback
 
-    map.current = new mapboxgl.Map({
+    const m = new mapboxgl.Map({
       container: mapContainer.current,
       style: "mapbox://styles/mapbox/streets-v12",
       center: defaultCenter,
       zoom: 9,
     });
+    map.current = m;
 
-    const m = map.current;
-
-    // 🧭 Compass only (no zoom) — top-right
+    // Compass only (no zoom buttons)
     m.addControl(
       new mapboxgl.NavigationControl({ showZoom: false, showCompass: true }),
       "top-right"
     );
 
-    // 📍 "Go to my current location" button — top-right
+    // “Go to my current location” button
     m.addControl(
       new mapboxgl.GeolocateControl({
         positionOptions: { enableHighAccuracy: true },
-        trackUserLocation: false, // set true if you want follow mode
+        trackUserLocation: false, // set true to follow continuously
         showUserLocation: true,
       }),
       "top-right"
     );
 
-    // A red search/focus marker you move via APIs (not added by user)
+    // Focus marker (not user-added; controlled via ref)
     focusMarker.current = new mapboxgl.Marker({ color: "#ef4444" })
       .setLngLat(defaultCenter)
       .addTo(m);
 
-    // Try to center on user once (no marker creation here)
+    // Try to center on user once
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -90,63 +91,59 @@ export const Map = forwardRef<MapRef, MapProps>(({ onPhotoClick }, ref) => {
           m.flyTo({ center: loc, zoom: 13, essential: true });
           focusMarker.current?.setLngLat(loc);
         },
-        (err) => {
-          console.log("Unable to get user location, using default:", err.message);
-        },
+        (e) => console.log("Geolocation unavailable, using default:", e.message),
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     }
 
-    // Cleanup on unmount
     return () => {
       m.remove();
       map.current = null;
     };
   }, []);
 
-  // --- Render photo markers only ---
+  // ---- render photo markers only (single element with padding respected) ----
   useEffect(() => {
     if (!map.current) return;
 
-    // Remove old markers
+    // remove old
     Object.values(photoMarkers.current).forEach((mk) => mk.remove());
     photoMarkers.current = {};
 
-    // Add current ones
     photos.forEach((photo) => {
       if (!map.current) return;
 
       const el = document.createElement("div");
       el.className = "camera-marker";
-      el.style.backgroundImage = `url(${photoIcon})`;
       el.style.width = "40px";
       el.style.height = "40px";
-      el.style.backgroundSize = "80%";
-      el.style.backgroundPosition = "center";
-      el.style.backgroundRepeat = "no-repeat";
-      el.style.cursor = "pointer";
+      el.style.padding = "8px"; // visible “breathing room”
       el.style.borderRadius = "50%";
-      el.style.padding = "8px";
+      el.style.cursor = "pointer";
       el.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
+      el.style.backgroundImage = `url(${photoIcon})`;
+      el.style.backgroundRepeat = "no-repeat";
+      el.style.backgroundPosition = "center";
+      el.style.backgroundSize = "80%";
+      el.style.backgroundOrigin = "padding-box"; // ← make padding affect bg
 
-      // Prevent map-level handlers from triggering through the marker element
+      // open viewer
       el.addEventListener("click", (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
         onPhotoClick?.(photo.signedUrl);
       });
 
-      // Right-click delete
+      // right-click delete
       el.addEventListener("contextmenu", async (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
-        const confirmDelete = confirm("Delete this photo?");
-        if (!confirmDelete) return;
+        if (!confirm("Delete this photo?")) return;
         try {
           await photosAPI.delete(photo.id);
           setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
-        } catch (error) {
-          console.error("Failed to delete photo:", error);
+        } catch (err) {
+          console.error("Delete failed:", err);
           alert("Failed to delete photo. Please try again.");
         }
       });
@@ -159,22 +156,24 @@ export const Map = forwardRef<MapRef, MapProps>(({ onPhotoClick }, ref) => {
     });
   }, [photos, onPhotoClick]);
 
-  // --- Expose a couple of imperative methods to the parent ---
+  // ---- expose methods ----
   useImperativeHandle(ref, () => ({
     flyToLocation: (lng: number, lat: number) => {
-      if (!map.current) return;
-      map.current.flyTo({ center: [lng, lat], zoom: 14, essential: true });
+      const m = map.current;
+      if (!m) return;
+      m.flyTo({ center: [lng, lat], zoom: 14, essential: true });
       focusMarker.current?.setLngLat([lng, lat]);
     },
     requestUserLocation: () => {
-      if (!map.current || !("geolocation" in navigator)) {
+      const m = map.current;
+      if (!m || !("geolocation" in navigator)) {
         alert("Geolocation not supported in this browser.");
         return;
       }
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           const loc: [number, number] = [pos.coords.longitude, pos.coords.latitude];
-          map.current!.flyTo({ center: loc, zoom: 13, essential: true });
+          m.flyTo({ center: loc, zoom: 13, essential: true });
           focusMarker.current?.setLngLat(loc);
         },
         (err) => alert(`Unable to get your location: ${err.message}`),
@@ -186,5 +185,5 @@ export const Map = forwardRef<MapRef, MapProps>(({ onPhotoClick }, ref) => {
     },
   }));
 
-  return <div ref={mapContainer} className="w-full h-full" />;
+  return <div ref={mapContainer} className="h-full w-full" />;
 });

@@ -199,7 +199,7 @@ export const photosAPI = {
     latitude: number,
     longitude: number,
   ): Promise<Photo> {
-    // 🔐 get the current user session
+    // 🔐 get the current user session (for upload)
     const {
       data: { session },
       error: sessionError,
@@ -215,7 +215,7 @@ export const photosAPI = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        // ✅ send *user* token, not anon key
+        // user token for the edge function
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
@@ -245,14 +245,14 @@ export const photosAPI = {
       latitude: data.latitude,
       longitude: data.longitude,
       created_at: new Date().toISOString(),
-      user_id: data.user_id ?? null, // ✅ capture user_id
+      user_id: data.user_id ?? null,
     };
   },
 
   async getAll(): Promise<Photo[]> {
     const response = await fetch(`${serverUrl}/photos`, {
       headers: {
-        // for now, photos are public, so anon key is fine here
+        // photos list is effectively public right now
         Authorization: `Bearer ${supabaseAnonKey}`,
       },
     });
@@ -272,6 +272,26 @@ export const photosAPI = {
     return (data.photos as Photo[]) || [];
   },
 
-  // delete stays same for now
+  async delete(id: string): Promise<void> {
+    const response = await fetch(`${serverUrl}/photos/${id}`, {
+      method: "DELETE",
+      headers: {
+        // delete endpoint doesn't check auth yet, this is just a bearer
+        Authorization: `Bearer ${supabaseAnonKey}`,
+      },
+    });
+
+    if (!response.ok) {
+      let message = "Failed to delete photo";
+      try {
+        const error = await response.json();
+        if (error?.error) message = error.error;
+      } catch {
+        // ignore
+      }
+      throw new Error(message);
+    }
+  },
 };
+
 

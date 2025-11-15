@@ -157,4 +157,16 @@ html { font-size: var(--font-size); }
   right: 0.5rem !important;
 }
 
+/* Move attribution + watermark upward above your footer */
+.mapboxgl-ctrl-bottom-right,
+.mapboxgl-ctrl-bottom-left {
+  bottom: 60px !important;  /* adjust height to match your footer height */
+}
+
+/* Move Mapbox logo (wordmark) too */
+.mapboxgl-ctrl-logo {
+  bottom: 60px !important;
+}
+
+
 

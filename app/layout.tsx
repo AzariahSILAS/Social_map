@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "mapbox-gl/dist/mapbox-gl.css";
 
-
 import { AppHeader } from "@/components/AppHeader";
 import { AppFooter } from "@/components/AppFooter";
 
@@ -42,17 +41,19 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-[100dvh] flex flex-col text-slate-50`}
+      >
         {/* GLOBAL HEADER */}
         <AppHeader />
 
-        {/* PAGE CONTENT */}
-        <main className="flex-1 relative overflow-hidden min-h-screen">
+        {/* PAGE CONTENT – fills space between header and footer */}
+        <div className="flex-1 flex flex-col overflow-hidden">
           {children}
-        </main>
-        <AppFooter />
+        </div>
 
+        {/* GLOBAL FOOTER */}
+        <AppFooter />
       </body>
     </html>
   );

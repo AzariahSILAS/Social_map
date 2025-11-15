@@ -107,7 +107,44 @@ export const profilesAPI = {
 
     return (data as Profile) ?? null;
   },
+
+  /** Create or update my profile row */
+  async updateMyProfile(updates: {
+    username?: string | null;
+    full_name?: string | null;
+    bio?: string | null;
+  }): Promise<Profile> {
+    const {
+      data: { user },
+      error: userErr,
+    } = await supabase.auth.getUser();
+
+    if (userErr || !user) {
+      throw new Error("Not authenticated");
+    }
+
+    // Upsert so it works even if the row doesn't exist yet
+    const { data, error } = await supabase
+      .from("profiles")
+      .upsert(
+        {
+          id: user.id,
+          ...updates,
+        },
+        { onConflict: "id" },
+      )
+      .select("*")
+      .single();
+
+    if (error) {
+      console.error("Error updating profile:", error);
+      throw error;
+    }
+
+    return data as Profile;
+  },
 };
+
 
 /** ---------- MARKERS API (still here if you want later) ---------- */
 

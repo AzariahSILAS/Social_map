@@ -1,26 +1,22 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
 import "mapbox-gl/dist/mapbox-gl.css";
-import "./globals.css"; 
-import { Analytics } from "@vercel/analytics/next"
-import { SpeedInsights } from "@vercel/speed-insights/next"
 
+import { AppHeader } from "@/components/AppHeader";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
-  display: "swap",
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
-  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "Social Map",
-  description: "Explore and capture the world around you.",
   icons: {
     icon: [
       { rel: "icon", url: "/favicon-32x32.png", sizes: "32x32" },
@@ -33,24 +29,27 @@ export const metadata: Metadata = {
   viewport: {
     width: "device-width",
     initialScale: 1,
-    viewportFit: "cover", // Helps iOS handle safe areas
+    viewportFit: "cover",
   },
-  themeColor: "#0f172a", // Matches your dark background (slate-900)
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    <html lang="en" >
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-slate-900 text-white`}
-      >
-        {children}
-        <Analytics />
-        <SpeedInsights />
+    <html lang="en">
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        
+        {/* GLOBAL HEADER */}
+        <AppHeader />
+
+        {/* PAGE CONTENT */}
+        <main className="min-h-screen">
+          {children}
+        </main>
+
       </body>
     </html>
   );

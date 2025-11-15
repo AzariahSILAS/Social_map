@@ -10,7 +10,7 @@ import { Camera as CameraComponent } from "@/components/Camera";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import { supabase } from "@/utils/supabase/client";
 
-import { AppHeader } from "@/components/AppHeader";
+
 import { AppFooter } from "@/components/AppFooter";
 
 export default function HomePage() {
@@ -78,13 +78,7 @@ export default function HomePage() {
 
   return (
     <div className="w-full h-screen flex flex-col bg-slate-950 text-slate-50">
-      <AppHeader
-        isLoading={authLoading}
-        user={user}
-        onClickLogin={() => router.push("/auth")}
-        onClickProfile={() => router.push("/profile")}
 
-      />
 
       <main className="flex-1 relative">
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-full px-4 flex justify-center">

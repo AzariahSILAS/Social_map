@@ -49,17 +49,22 @@ export const Map = forwardRef<MapRef, MapProps>(({ onPhotoClick }, ref) => {
   }, []);
 
   // ---- map init ----
-  useEffect(() => {
-    if (map.current || !mapContainer.current) return;
+ useEffect(() => {
+  if (map.current || !mapContainer.current) return;
 
-    const defaultCenter: [number, number] = [-74.5, 40]; // NYC fallback
+  const defaultCenter: [number, number] = [-74.5, 40]; // fallback if geo fails
+
+  // helper to actually create the map once we know the center
+  const initMap = (center: [number, number]) => {
+    if (!mapContainer.current) return;
 
     const m = new mapboxgl.Map({
       container: mapContainer.current,
       style: "mapbox://styles/mapbox/streets-v12",
-      center: defaultCenter,
-      zoom: 9,
+      center,
+      zoom: 13, // a bit more zoomed in since it's "your location"
     });
+
     map.current = m;
 
     // Compass only (no zoom buttons)
@@ -72,35 +77,47 @@ export const Map = forwardRef<MapRef, MapProps>(({ onPhotoClick }, ref) => {
     m.addControl(
       new mapboxgl.GeolocateControl({
         positionOptions: { enableHighAccuracy: true },
-        trackUserLocation: false, // set true to follow continuously
+        trackUserLocation: false,
         showUserLocation: true,
       }),
       "top-right"
     );
 
-    // Focus marker (not user-added; controlled via ref)
+    // Focus marker at initial center
     focusMarker.current = new mapboxgl.Marker({ color: "#ef4444" })
-      .setLngLat(defaultCenter)
+      .setLngLat(center)
       .addTo(m);
+  };
 
-    // Try to center on user once
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const loc: [number, number] = [pos.coords.longitude, pos.coords.latitude];
-          m.flyTo({ center: loc, zoom: 13, essential: true });
-          focusMarker.current?.setLngLat(loc);
-        },
-        (e) => console.log("Geolocation unavailable, using default:", e.message),
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      );
-    }
+  // Try to get user location BEFORE creating the map
+  if ("geolocation" in navigator) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const loc: [number, number] = [
+          pos.coords.longitude,
+          pos.coords.latitude,
+        ];
+        initMap(loc);
+      },
+      (err) => {
+        console.log("Geolocation failed, using default center:", err.message);
+        initMap(defaultCenter);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  } else {
+    // No geolocation support → just use default
+    initMap(defaultCenter);
+  }
 
-    return () => {
-      m.remove();
+  return () => {
+    if (map.current) {
+      map.current.remove();
       map.current = null;
-    };
-  }, []);
+    }
+  };
+}, []);
+
 
   // ---- render photo markers only (single element with padding respected) ----
   useEffect(() => {

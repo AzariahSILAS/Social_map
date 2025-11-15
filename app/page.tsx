@@ -21,7 +21,7 @@ export default function HomePage() {
   };
 
   return (
-    <div  className="w-full h-[100dvh] max-h-[100dvh] overflow-hidden flex flex-col bg-slate-950 text-slate-50">
+    <div  className="w-full flex-1 flex flex-col bg-slate-950 text-slate-50">
       {/* Global header */}
   
 

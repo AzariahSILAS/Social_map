@@ -48,7 +48,7 @@ export default function RootLayout({
         <AppHeader />
 
         {/* PAGE CONTENT – fills space between header and footer */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col ">
           {children}
         </div>
 

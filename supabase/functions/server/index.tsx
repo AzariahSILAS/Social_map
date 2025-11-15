@@ -1,5 +1,5 @@
+// supabase/functions/server/index.tsx
 // @ts-nocheck
-
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "hono/logger";
@@ -8,59 +8,35 @@ import * as kv from "@/kv_store.tsx";
 
 const app = new Hono();
 
-// ---------- Supabase setup ----------
-
-// These MUST be set in your Supabase Edge Function env,
-// not in .env.local (that file is for Next.js).
-const supabaseUrl = Deno.env.get("SUPABASE_URL");
-const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error("❌ Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in Edge Function env");
-  throw new Error("Supabase env vars not configured for Edge Function");
-}
-
+// Initialize Supabase client
+const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-// You can optionally set PHOTO_BUCKET in the function env.
-// If not set, we fall back to the original name.
-const PHOTO_BUCKET = Deno.env.get("PHOTO_BUCKET") ?? "make-ac2b2b01-photos";
+// Bucket name for photos
+const PHOTO_BUCKET = "make-ac2b2b01-photos";
 
-// Prefix for all routes for this function (must match client)
-const FUNCTION_PREFIX = "/make-server-ac2b2b01";
-
-// ---------- Bucket bootstrap ----------
-
+// Create storage bucket on startup
 (async () => {
   try {
-    const { data: buckets, error } = await supabase.storage.listBuckets();
-    if (error) {
-      console.error("Error listing buckets:", error);
-      return;
-    }
-
+    const { data: buckets } = await supabase.storage.listBuckets();
     const bucketExists = buckets?.some((bucket) => bucket.name === PHOTO_BUCKET);
     if (!bucketExists) {
-      const { error: createError } = await supabase.storage.createBucket(PHOTO_BUCKET, {
+      await supabase.storage.createBucket(PHOTO_BUCKET, {
         public: false,
-        fileSizeLimit: 10 * 1024 * 1024, // 10MB
+        fileSizeLimit: 10485760, // 10MB
       });
-
-      if (createError) {
-        console.error("Error creating storage bucket:", createError);
-      } else {
-        console.log(`✅ Created storage bucket: ${PHOTO_BUCKET}`);
-      }
+      console.log(`Created storage bucket: ${PHOTO_BUCKET}`);
     }
   } catch (error) {
     console.error("Error creating storage bucket:", error);
   }
 })();
 
-// ---------- Middleware ----------
-
+// Enable logger
 app.use("*", logger(console.log));
 
+// Enable CORS for all routes and methods
 app.use(
   "/*",
   cors({
@@ -72,44 +48,23 @@ app.use(
   }),
 );
 
-// ---------- Routes ----------
-
-// Health check
-app.get(`${FUNCTION_PREFIX}/health`, (c) => {
+// Health check endpoint
+app.get("/make-server-ac2b2b01/health", (c) => {
   return c.json({ status: "ok" });
 });
 
-// Upload photo
 // Upload photo endpoint
 app.post("/make-server-ac2b2b01/photos/upload", async (c) => {
   try {
-    // 🔐 Get access token from Authorization header
-    const authHeader = c.req.header("Authorization") ?? "";
-    const token = authHeader.startsWith("Bearer ")
-      ? authHeader.slice("Bearer ".length).trim()
-      : "";
-
-    if (!token) {
-      return c.json({ error: "Missing auth token" }, 401);
-    }
-
-    // Look up the user from the access token
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser(token);
-
-    if (userError || !user) {
-      console.error("Auth error in upload:", userError);
-      return c.json({ error: "Invalid or expired auth token" }, 401);
-    }
-
-    // Parse JSON body
     const body = await c.req.json();
     const { base64Data, filename, latitude, longitude, userId } = body;
 
-
-    if (!base64Data || !filename || latitude === undefined || longitude === undefined) {
+    if (
+      !base64Data ||
+      !filename ||
+      latitude === undefined ||
+      longitude === undefined
+    ) {
       return c.json({ error: "Missing required fields" }, 400);
     }
 
@@ -122,7 +77,7 @@ app.post("/make-server-ac2b2b01/photos/upload", async (c) => {
 
     // Upload to Supabase Storage
     const filePath = `${Date.now()}-${filename}`;
-    const { error: uploadError } = await supabase.storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
       .from(PHOTO_BUCKET)
       .upload(filePath, binaryData, {
         contentType: "image/jpeg",
@@ -148,35 +103,37 @@ app.post("/make-server-ac2b2b01/photos/upload", async (c) => {
     }
 
     const photoId = `photo_${Date.now()}`;
+    const created_at = new Date().toISOString();
 
-    // ✅ Store user_id in KV
+    // Store photo metadata in KV store, INCLUDING userId
     await kv.set(photoId, {
-  id: photoId,
-  filePath,
-  signedUrl: signedUrlData.signedUrl,
-  latitude,
-  longitude,
-  userId: userId ?? null,
-  created_at: new Date().toISOString(),
-});
+      id: photoId,
+      filePath,
+      signedUrl: signedUrlData.signedUrl,
+      latitude,
+      longitude,
+      userId: userId ?? null, // 👈 now stored
+      created_at,
+    });
 
     return c.json({
       success: true,
       photoId,
+      filePath,
       signedUrl: signedUrlData.signedUrl,
       latitude,
       longitude,
-      user_id: user.id,
+      userId: userId ?? null,
+      created_at,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error in upload endpoint:", error);
     return c.json({ error: `Server error: ${error.message}` }, 500);
   }
 });
 
-
-// Get all photos
-app.get(`${FUNCTION_PREFIX}/photos`, async (c) => {
+// Get all photos endpoint
+app.get("/make-server-ac2b2b01/photos", async (c) => {
   try {
     const photos = await kv.getByPrefix("photo_");
     return c.json({ photos });
@@ -186,8 +143,8 @@ app.get(`${FUNCTION_PREFIX}/photos`, async (c) => {
   }
 });
 
-// Delete a photo
-app.delete(`${FUNCTION_PREFIX}/photos/:id`, async (c) => {
+// Delete photo endpoint
+app.delete("/make-server-ac2b2b01/photos/:id", async (c) => {
   try {
     const photoId = c.req.param("id");
     const photo = await kv.get(photoId);
@@ -196,17 +153,16 @@ app.delete(`${FUNCTION_PREFIX}/photos/:id`, async (c) => {
       return c.json({ error: "Photo not found" }, 404);
     }
 
-    // Delete file from storage
+    // Delete from storage
     const { error: deleteError } = await supabase.storage
       .from(PHOTO_BUCKET)
       .remove([photo.filePath]);
 
     if (deleteError) {
       console.error("Storage deletion error:", deleteError);
-      // We still proceed to delete from KV so we don't leak dangling metadata
     }
 
-    // Delete metadata
+    // Delete from KV store
     await kv.del(photoId);
 
     return c.json({ success: true });

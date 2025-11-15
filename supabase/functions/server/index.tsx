@@ -106,7 +106,8 @@ app.post("/make-server-ac2b2b01/photos/upload", async (c) => {
 
     // Parse JSON body
     const body = await c.req.json();
-    const { base64Data, filename, latitude, longitude } = body;
+    const { base64Data, filename, latitude, longitude, userId } = body;
+
 
     if (!base64Data || !filename || latitude === undefined || longitude === undefined) {
       return c.json({ error: "Missing required fields" }, 400);
@@ -150,14 +151,14 @@ app.post("/make-server-ac2b2b01/photos/upload", async (c) => {
 
     // ✅ Store user_id in KV
     await kv.set(photoId, {
-      id: photoId,
-      filePath,
-      signedUrl: signedUrlData.signedUrl,
-      latitude,
-      longitude,
-      created_at: new Date().toISOString(),
-      user_id: user.id,
-    });
+  id: photoId,
+  filePath,
+  signedUrl: signedUrlData.signedUrl,
+  latitude,
+  longitude,
+  userId: userId ?? null,
+  created_at: new Date().toISOString(),
+});
 
     return c.json({
       success: true,

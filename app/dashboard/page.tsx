@@ -74,7 +74,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-slate-950 text-slate-50">
+    <div className="h-full bg-slate-950 text-slate-50">
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-8 pb-24">
         {/* Profile header */}
         <section className="flex items-center gap-4">

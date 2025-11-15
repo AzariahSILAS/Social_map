@@ -3,18 +3,21 @@
 
 import { createClient } from "@supabase/supabase-js";
 
-// These come from .env.local
+// ---------- ENV + CLIENT ----------
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const edgeFunctionName = process.env.NEXT_PUBLIC_EDGE_FUNCTION_NAME!;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn("⚠️ Supabase URL or ANON key missing. Check .env.local");
+  console.warn("⚠️ Supabase URL or ANON key missing. Check .env.local / Vercel env.");
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const serverUrl = `${supabaseUrl}/functions/v1/${edgeFunctionName}`;
+
+// ---------- TYPES ----------
 
 export interface Marker {
   id: string;
@@ -30,28 +33,29 @@ export interface Photo {
   signedUrl: string;
   latitude: number;
   longitude: number;
+  userId: string | null;
   created_at: string;
-  user_id?: string | null; // ✅ add this
 }
 
+export interface Profile {
+  id: string;
+  username: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  created_at: string;
+}
 
-
-/** ---------- AUTH + PROFILE HELPERS ---------- */
+// ---------- AUTH HELPERS ----------
 
 export async function signUpWithEmail(email: string, password: string) {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-  });
+  const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) throw error;
   return data;
 }
 
 export async function signInWithEmail(email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
   return data;
 }
@@ -67,14 +71,7 @@ export async function getCurrentUser() {
   return data.user ?? null;
 }
 
-export interface Profile {
-  id: string;
-  username: string | null;
-  full_name: string | null;
-  avatar_url: string | null;
-  bio: string | null;
-  created_at: string;
-}
+// ---------- PROFILES API ----------
 
 export const profilesAPI = {
   async getProfile(userId: string): Promise<Profile | null> {
@@ -110,7 +107,6 @@ export const profilesAPI = {
     return (data as Profile) ?? null;
   },
 
-  /** Create or update my profile row */
   async updateMyProfile(updates: {
     username?: string | null;
     full_name?: string | null;
@@ -125,7 +121,6 @@ export const profilesAPI = {
       throw new Error("Not authenticated");
     }
 
-    // Upsert so it works even if the row doesn't exist yet
     const { data, error } = await supabase
       .from("profiles")
       .upsert(
@@ -147,8 +142,7 @@ export const profilesAPI = {
   },
 };
 
-
-/** ---------- MARKERS API (still here if you want later) ---------- */
+// ---------- MARKERS API (optional) ----------
 
 export const markersAPI = {
   async getAll(): Promise<Marker[]> {
@@ -190,7 +184,7 @@ export const markersAPI = {
   },
 };
 
-/** ---------- PHOTOS API (same behavior as before) ---------- */
+// ---------- PHOTOS API ----------
 
 export const photosAPI = {
   async upload(
@@ -198,31 +192,20 @@ export const photosAPI = {
     filename: string,
     latitude: number,
     longitude: number,
+    userId?: string,
   ): Promise<Photo> {
-    // 🔐 get the current user session (for upload)
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
-
-    if (sessionError || !session) {
-      throw new Error("You must be logged in to upload photos.");
-    }
-
-    const accessToken = session.access_token;
-
     const response = await fetch(`${serverUrl}/photos/upload`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        // user token for the edge function
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${supabaseAnonKey}`,
       },
       body: JSON.stringify({
         base64Data,
         filename,
         latitude,
         longitude,
+        userId, // sent to the Edge Function
       }),
     });
 
@@ -240,19 +223,18 @@ export const photosAPI = {
     const data = await response.json();
     return {
       id: data.photoId,
-      filePath: "",
+      filePath: data.filePath ?? "",
       signedUrl: data.signedUrl,
       latitude: data.latitude,
       longitude: data.longitude,
-      created_at: new Date().toISOString(),
-      user_id: data.user_id ?? null,
+      userId: userId ?? data.userId ?? null,
+      created_at: data.created_at ?? new Date().toISOString(),
     };
   },
 
   async getAll(): Promise<Photo[]> {
     const response = await fetch(`${serverUrl}/photos`, {
       headers: {
-        // photos list is effectively public right now
         Authorization: `Bearer ${supabaseAnonKey}`,
       },
     });
@@ -269,6 +251,7 @@ export const photosAPI = {
     }
 
     const data = await response.json();
+    // Each item from KV should already have userId if the edge function was updated
     return (data.photos as Photo[]) || [];
   },
 
@@ -276,7 +259,6 @@ export const photosAPI = {
     const response = await fetch(`${serverUrl}/photos/${id}`, {
       method: "DELETE",
       headers: {
-        // delete endpoint doesn't check auth yet, this is just a bearer
         Authorization: `Bearer ${supabaseAnonKey}`,
       },
     });
@@ -293,5 +275,3 @@ export const photosAPI = {
     }
   },
 };
-
-

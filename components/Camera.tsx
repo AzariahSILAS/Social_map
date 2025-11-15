@@ -1,6 +1,8 @@
+"use client";
+
 import { useEffect, useRef, useState } from "react";
 import { X, RefreshCcw } from "lucide-react";
-import { photosAPI } from "@/utils/supabase/client"; // keep this path if that's your file
+import { photosAPI, getCurrentUser } from "@/utils/supabase/client";
 
 interface CameraProps {
   isOpen: boolean;
@@ -20,36 +22,45 @@ export function Camera({ isOpen, onClose, onPhotoSaved }: CameraProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [useFront, setUseFront] = useState(false);
-  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  // ---------- lifecycle ----------
+  // ---------- lifecycle (open/close) ----------
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) {
+      startCamera();
+      getCurrentLocation();
+
+      // load user id when camera opens
+      (async () => {
+        try {
+          const user = await getCurrentUser();
+          setCurrentUserId(user?.id ?? null);
+        } catch (err) {
+          console.error("Error getting current user for camera:", err);
+        }
+      })();
+    } else {
       stopCamera();
-      return;
+      setCurrentUserId(null);
     }
 
-    startCamera();
-    getCurrentLocation();
-
-    const onEsc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    const onHide = () => stopCamera(); // safety when tab/app is hidden
-    document.addEventListener("keydown", onEsc);
-    document.addEventListener("visibilitychange", onHide);
-
     return () => {
-      document.removeEventListener("keydown", onEsc);
-      document.removeEventListener("visibilitychange", onHide);
       stopCamera();
+      setCurrentUserId(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, useFront]);
+  }, [isOpen]);
 
   // ---------- geolocation ----------
   const getCurrentLocation = () => {
     if (!("geolocation" in navigator)) return;
     navigator.geolocation.getCurrentPosition(
-      (pos) => setCurrentLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (pos) =>
+        setCurrentLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       (error) => console.warn("Location error:", error)
     );
   };
@@ -59,20 +70,19 @@ export function Camera({ isOpen, onClose, onPhotoSaved }: CameraProps) {
     if (isStarting) return;
     setIsStarting(true);
     try {
-      // Try preferred camera first
       const facingMode = useFront ? "user" : "environment";
       const constraints: MediaStreamConstraints = {
         audio: false,
         video: {
-          facingMode,                    // spec-compliant
-          width: { ideal: 1920 },        // better clarity if available
+          facingMode,
+          width: { ideal: 1920 },
           height: { ideal: 1080 },
         },
       };
 
       let stream = await navigator.mediaDevices.getUserMedia(constraints);
 
-      // Some iOS devices ignore facingMode; if wrong camera, try "exact" fallback
+      // Some devices ignore facingMode; try exact as a fallback
       const track = stream.getVideoTracks()[0];
       const settings = track.getSettings();
       const gotFront = settings.facingMode === "user";
@@ -85,7 +95,7 @@ export function Camera({ isOpen, onClose, onPhotoSaved }: CameraProps) {
             video: { facingMode: { exact: facingMode as "user" | "environment" } },
           });
         } catch {
-          // keep the first stream if exact fails
+          // keep original stream if exact fails
         }
       }
 
@@ -95,7 +105,6 @@ export function Camera({ isOpen, onClose, onPhotoSaved }: CameraProps) {
         await videoRef.current.play().catch(() => {});
       }
 
-      // Reset UI state when starting
       setIsCaptured(false);
     } catch (err) {
       console.error("getUserMedia error:", err);
@@ -109,7 +118,9 @@ export function Camera({ isOpen, onClose, onPhotoSaved }: CameraProps) {
     if (!streamRef.current) return;
     try {
       streamRef.current.getTracks().forEach((t) => t.stop());
-    } catch {}
+    } catch {
+      // ignore
+    }
     streamRef.current = null;
     setIsCaptured(false);
   };
@@ -119,14 +130,14 @@ export function Camera({ isOpen, onClose, onPhotoSaved }: CameraProps) {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
-    const { videoWidth, videoHeight } = video;
 
-    // Match canvas to actual sensor aspect (avoids squashed images)
+    const { videoWidth, videoHeight } = video;
     canvas.width = videoWidth;
     canvas.height = videoHeight;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
     ctx.drawImage(video, 0, 0, videoWidth, videoHeight);
     setIsCaptured(true);
   };
@@ -135,6 +146,12 @@ export function Camera({ isOpen, onClose, onPhotoSaved }: CameraProps) {
 
   const handleSavePhoto = async () => {
     const canvas = canvasRef.current;
+
+    if (!currentUserId) {
+      alert("You must be logged in to save photos.");
+      return;
+    }
+
     if (!canvas || !currentLocation) {
       alert("Location not available. Please enable location and try again.");
       return;
@@ -147,7 +164,8 @@ export function Camera({ isOpen, onClose, onPhotoSaved }: CameraProps) {
         base64Data,
         `photo-${Date.now()}.jpg`,
         currentLocation.lat,
-        currentLocation.lng
+        currentLocation.lng,
+        currentUserId
       );
 
       onPhotoSaved?.();
@@ -161,12 +179,15 @@ export function Camera({ isOpen, onClose, onPhotoSaved }: CameraProps) {
   };
 
   // ---------- drag-to-close ----------
-  const handleTouchStart = (e: React.TouchEvent) => setDragStart(e.touches[0].clientY);
+  const handleTouchStart = (e: React.TouchEvent) =>
+    setDragStart(e.touches[0].clientY);
+
   const handleTouchMove = (e: React.TouchEvent) => {
     if (dragStart === null) return;
     const d = e.touches[0].clientY - dragStart;
     if (d > 0) setDragDistance(d);
   };
+
   const endDrag = () => {
     if (dragDistance > 100) onClose();
     setDragStart(null);
@@ -174,6 +195,7 @@ export function Camera({ isOpen, onClose, onPhotoSaved }: CameraProps) {
   };
 
   const handleMouseDown = (e: React.MouseEvent) => setDragStart(e.clientY);
+
   const handleMouseMove = (e: React.MouseEvent) => {
     if (dragStart === null) return;
     const d = e.clientY - dragStart;
@@ -200,7 +222,7 @@ export function Camera({ isOpen, onClose, onPhotoSaved }: CameraProps) {
     >
       {/* Top bar */}
       <div className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between p-3">
-        <div className="w-10 h-1 rounded-full bg-white/40 mx-auto" />
+        <div className="mx-auto h-1 w-10 rounded-full bg-white/40" />
         <button
           onClick={onClose}
           className="absolute right-3 top-3 rounded-full bg-black/50 p-2 text-white transition-colors hover:bg-black/70"
@@ -230,7 +252,12 @@ export function Camera({ isOpen, onClose, onPhotoSaved }: CameraProps) {
         {!isCaptured ? (
           <>
             <button
-              onClick={() => setUseFront((v) => !v)}
+              onClick={() => {
+                setUseFront((v) => !v);
+                // restart camera with new facing mode
+                stopCamera();
+                void startCamera();
+              }}
               disabled={isStarting}
               className="rounded-lg bg-white/15 px-4 py-2 text-white backdrop-blur transition-colors hover:bg-white/25 disabled:opacity-50"
               aria-label="Flip camera"

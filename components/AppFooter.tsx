@@ -1,41 +1,60 @@
-import { Camera, Map as MapIcon } from "lucide-react";
+"use client";
 
-interface AppFooterProps {
-  isLoggedIn: boolean;
-  onClickFeed: () => void;
-  onClickCamera: () => void;
-}
+import { usePathname, useRouter } from "next/navigation";
+import { Camera, Home, Map } from "lucide-react";
 
-export function AppFooter({
-  isLoggedIn,
-  onClickFeed,
-  onClickCamera,
-}: AppFooterProps) {
+export function AppFooter() {
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const isCameraPage = pathname === "/camera";
+  const isLoggedIn = true; // later: replace with real auth state
+
   return (
-    <footer className="bg-slate-950/95 border-t border-slate-800 px-8 py-3 flex items-center justify-between">
-      {/* Feed icon (always visible) */}
-      <button
-        type="button"
-        onClick={onClickFeed}
-        className="inline-flex flex-col items-center gap-1 text-xs text-slate-400 hover:text-slate-100 transition"
-      >
-        <MapIcon className="w-5 h-5" />
-        <span>Feed</span>
-      </button>
-
-      {/* Camera icon (only if logged in) */}
-      {isLoggedIn && (
+    <footer className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-[#0A0A0A]/80 backdrop-blur-md text-white">
+      <div className="max-w-5xl mx-auto flex items-center justify-around px-4 py-2">
+        {/* Home */}
         <button
-          type="button"
-          onClick={onClickCamera}
-          className="inline-flex flex-col items-center gap-1 text-xs text-slate-100"
+          onClick={() => router.push("/")}
+          className="flex flex-col items-center text-xs hover:text-white/80 transition"
         >
-          <div className="w-12 h-12 rounded-full bg-sky-500 flex items-center justify-center shadow-lg shadow-sky-500/30 hover:bg-sky-400 transition">
-            <Camera className="w-5 h-5 text-slate-950" />
-          </div>
-          <span>Snap</span>
+          <Home
+            className={`w-6 h-6 ${
+              pathname === "/" ? "text-white" : "text-white/60"
+            }`}
+          />
+          <span>Home</span>
         </button>
-      )}
+
+        {/* Camera – only if logged in & not already on /camera */}
+        {isLoggedIn && !isCameraPage && (
+          <button
+            onClick={() => router.push("/camera")}
+            className="flex flex-col items-center text-xs hover:text-white/80 transition"
+          >
+            <Camera
+              className={`w-6 h-6 ${
+                pathname === "/camera" ? "text-white" : "text-white/60"
+              }`}
+            />
+            <span>Camera</span>
+          </button>
+        )}
+
+        {/* Feed placeholder */}
+        <button
+          onClick={() => router.push("/feed")}
+          className="flex flex-col items-center text-xs hover:text-white/80 transition"
+        >
+          <Map
+            className={`w-6 h-6 ${
+              pathname === "/feed" ? "text-white" : "text-white/60"
+            }`}
+          />
+          <span>Feed</span>
+        </button>
+      </div>
     </footer>
   );
 }
+

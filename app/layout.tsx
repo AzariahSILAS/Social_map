@@ -3,7 +3,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "mapbox-gl/dist/mapbox-gl.css";
 
+
 import { AppHeader } from "@/components/AppHeader";
+import { AppFooter } from "@/components/AppFooter";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -46,9 +48,10 @@ export default function RootLayout({
         <AppHeader />
 
         {/* PAGE CONTENT */}
-        <main className="min-h-screen">
+        <main className="flex-1 relative overflow-hidden min-h-screen">
           {children}
         </main>
+        <AppFooter />
 
       </body>
     </html>

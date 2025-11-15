@@ -153,6 +153,8 @@ html { font-size: var(--font-size); }
 .safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
 
 .mapboxgl-ctrl-top-right {
-  top: 60px;   /* below the search bar */
-  right: 8px;
+  top: 6rem !important;   /* tweak this value if needed */
+  right: 0.5rem !important;
 }
+
+

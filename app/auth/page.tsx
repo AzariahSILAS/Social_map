@@ -106,11 +106,7 @@ export default function AuthPage() {
     <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-50 px-4">
       <div className="w-full max-w-md">
         {/* Optional: simple header to match the app */}
-        <div className="mb-6 text-center">
-          <h1 className="text-sm tracking-[0.2em] uppercase text-slate-400">
-            Social Map
-          </h1>
-        </div>
+     
 
         <div className="rounded-2xl border border-slate-800 bg-slate-900/90 shadow-xl p-6">
           <h2 className="text-2xl font-semibold mb-2 text-center">

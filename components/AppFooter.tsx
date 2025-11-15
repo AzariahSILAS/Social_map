@@ -11,7 +11,7 @@ export function AppFooter() {
   const isLoggedIn = true; // later: replace with real auth state
 
   return (
-    <footer className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-[#0A0A0A]/80 backdrop-blur-md text-white">
+    <footer className=" border-t border-white/10 bg-[#0A0A0A]/80 backdrop-blur-md text-white">
       <div className="max-w-5xl mx-auto flex items-center justify-around px-4 py-2">
         {/* Home */}
         <button

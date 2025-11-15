@@ -28,17 +28,31 @@ export default function DashboardPage() {
         setUser(currentUser);
 
         if (currentUser) {
-          // load profile
+          // Load profile
           const p = await profilesAPI.getProfile(currentUser.id);
           if (!mounted) return;
           setProfile(p ?? null);
 
-          // load photos and filter by user_id
+          // Load photos from edge function
           const allPhotos = await photosAPI.getAll();
           if (!mounted) return;
-          const mine = allPhotos.filter(
-  (photo) => photo.userId && photo.userId === currentUser.id,
-);
+
+          console.log("📸 allPhotos from photosAPI.getAll():", allPhotos);
+
+          // Prefer filtering by userId if any photo has it
+          let mine: Photo[] = [];
+          if (allPhotos.some((photo) => photo.userId)) {
+            mine = allPhotos.filter(
+              (photo) => photo.userId === currentUser.id,
+            );
+          } else {
+            // Fallback during dev: if no userId on any photo, just show everything
+            console.warn(
+              "No userId present on any photos yet; falling back to all photos.",
+            );
+            mine = allPhotos;
+          }
+
           setMyPhotos(mine);
         }
       } catch (err) {
@@ -48,7 +62,7 @@ export default function DashboardPage() {
       }
     };
 
-    load();
+    void load();
 
     return () => {
       mounted = false;

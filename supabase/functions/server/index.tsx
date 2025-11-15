@@ -80,24 +80,47 @@ app.get(`${FUNCTION_PREFIX}/health`, (c) => {
 });
 
 // Upload photo
-app.post(`${FUNCTION_PREFIX}/photos/upload`, async (c) => {
+// Upload photo endpoint
+app.post("/make-server-ac2b2b01/photos/upload", async (c) => {
   try {
+    // 🔐 Get access token from Authorization header
+    const authHeader = c.req.header("Authorization") ?? "";
+    const token = authHeader.startsWith("Bearer ")
+      ? authHeader.slice("Bearer ".length).trim()
+      : "";
+
+    if (!token) {
+      return c.json({ error: "Missing auth token" }, 401);
+    }
+
+    // Look up the user from the access token
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser(token);
+
+    if (userError || !user) {
+      console.error("Auth error in upload:", userError);
+      return c.json({ error: "Invalid or expired auth token" }, 401);
+    }
+
+    // Parse JSON body
     const body = await c.req.json();
-    const { base64Data, filename, latitude, longitude } = body ?? {};
+    const { base64Data, filename, latitude, longitude } = body;
 
     if (!base64Data || !filename || latitude === undefined || longitude === undefined) {
       return c.json({ error: "Missing required fields" }, 400);
     }
 
-    // Strip "data:image/jpeg;base64," prefix if present
+    // Decode base64 to binary
     const base64WithoutPrefix = base64Data.split(",")[1] || base64Data;
-    const binaryData = Uint8Array.from(atob(base64WithoutPrefix), (ch) =>
-      ch.charCodeAt(0),
+    const binaryData = Uint8Array.from(
+      atob(base64WithoutPrefix),
+      (ch) => ch.charCodeAt(0),
     );
 
+    // Upload to Supabase Storage
     const filePath = `${Date.now()}-${filename}`;
-
-    // Upload to storage
     const { error: uploadError } = await supabase.storage
       .from(PHOTO_BUCKET)
       .upload(filePath, binaryData, {
@@ -110,30 +133,30 @@ app.post(`${FUNCTION_PREFIX}/photos/upload`, async (c) => {
       return c.json({ error: `Upload failed: ${uploadError.message}` }, 500);
     }
 
-    // Create signed URL (1 year)
+    // Create signed URL (valid for 1 year)
     const { data: signedUrlData, error: signedUrlError } = await supabase.storage
       .from(PHOTO_BUCKET)
-      .createSignedUrl(filePath, 60 * 60 * 24 * 365);
+      .createSignedUrl(filePath, 31536000); // 1 year in seconds
 
-    if (signedUrlError || !signedUrlData?.signedUrl) {
+    if (signedUrlError) {
       console.error("Signed URL error:", signedUrlError);
       return c.json(
-        { error: `Failed to create signed URL: ${signedUrlError?.message}` },
+        { error: `Failed to create signed URL: ${signedUrlError.message}` },
         500,
       );
     }
 
     const photoId = `photo_${Date.now()}`;
-    const createdAt = new Date().toISOString();
 
-    // Store metadata in KV
+    // ✅ Store user_id in KV
     await kv.set(photoId, {
       id: photoId,
       filePath,
       signedUrl: signedUrlData.signedUrl,
       latitude,
       longitude,
-      created_at: createdAt,
+      created_at: new Date().toISOString(),
+      user_id: user.id,
     });
 
     return c.json({
@@ -142,13 +165,14 @@ app.post(`${FUNCTION_PREFIX}/photos/upload`, async (c) => {
       signedUrl: signedUrlData.signedUrl,
       latitude,
       longitude,
-      created_at: createdAt,
+      user_id: user.id,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in upload endpoint:", error);
     return c.json({ error: `Server error: ${error.message}` }, 500);
   }
 });
+
 
 // Get all photos
 app.get(`${FUNCTION_PREFIX}/photos`, async (c) => {

@@ -1,149 +1,130 @@
-// app/dashboard/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
 import {
   getCurrentUser,
+  photosAPI,
+  type Photo,
   profilesAPI,
   type Profile,
 } from "@/utils/supabase/client";
-import { EditProfileModal } from "@/components/EditProfileModal";
+import Image from "next/image";
 
 export default function DashboardPage() {
-  const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [myPhotos, setMyPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
+    let mounted = true;
 
-    async function load() {
+    const load = async () => {
       try {
-        setLoading(true);
-        setError(null);
+        const currentUser = await getCurrentUser();
+        if (!mounted) return;
 
-        const user = await getCurrentUser();
-        if (!user) {
-          router.replace("/auth?mode=login");
-          return;
-        }
+        setUser(currentUser);
 
-        const prof = await profilesAPI.getMyProfile();
-        if (!cancelled) {
-          setProfile(prof);
+        if (currentUser) {
+          // load profile
+          const p = await profilesAPI.getProfile(currentUser.id);
+          if (!mounted) return;
+          setProfile(p ?? null);
+
+          // load photos and filter by user_id
+          const allPhotos = await photosAPI.getAll();
+          if (!mounted) return;
+          const mine = allPhotos.filter(
+            (photo) => photo.user_id === currentUser.id,
+          );
+          setMyPhotos(mine);
         }
-      } catch (err: any) {
+      } catch (err) {
         console.error("Error loading dashboard:", err);
-        if (!cancelled) {
-          setError(err?.message ?? "Something went wrong");
-        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (mounted) setLoading(false);
       }
-    }
+    };
 
-    void load();
+    load();
 
     return () => {
-      cancelled = true;
+      mounted = false;
     };
-  }, [router]);
+  }, []);
 
   if (loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100">
-        <p className="text-sm text-slate-300">Loading your dashboard…</p>
-      </main>
+      <div className="min-h-[100dvh] flex items-center justify-center bg-slate-950 text-slate-50">
+        <p className="text-slate-400">Loading dashboard…</p>
+      </div>
     );
   }
 
-  if (error) {
+  if (!user) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100">
-        <div className="max-w-md w-full px-6 py-4 rounded-xl bg-slate-900 border border-slate-800">
-          <h1 className="text-lg font-semibold mb-2">Dashboard error</h1>
-          <p className="text-sm text-red-400 mb-4">{error}</p>
-          <button
-            onClick={() => router.push("/")}
-            className="px-4 py-2 rounded-lg bg-slate-100 text-slate-950 text-sm font-medium hover:bg-white/90"
-          >
-            Back to map
-          </button>
-        </div>
-      </main>
+      <div className="min-h-[100dvh] flex items-center justify-center bg-slate-950 text-slate-50">
+        <p className="text-slate-300">
+          You need to be logged in to view your dashboard.
+        </p>
+      </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto max-w-3xl px-4 py-6 space-y-8">
-        {/* Top section: avatar + basic info */}
+    <div className="min-h-[100dvh] bg-slate-950 text-slate-50">
+      <div className="max-w-5xl mx-auto px-4 py-6 space-y-8 pb-24">
+        {/* Profile header */}
         <section className="flex items-center gap-4">
-          <div className="h-16 w-16 rounded-full bg-slate-800 flex items-center justify-center text-xl font-semibold">
-            {profile?.username?.[0]?.toUpperCase() ?? "?"}
+          <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center text-xl font-semibold">
+            {profile?.username?.[0]?.toUpperCase() ??
+              user.email?.[0]?.toUpperCase() ??
+              "U"}
           </div>
           <div>
-            <h1 className="text-2xl font-semibold">
-              {profile?.username || "New Explorer"}
+            <h1 className="text-xl font-semibold">
+              {profile?.username || user.email || "My Profile"}
             </h1>
-            <p className="text-sm text-slate-400">
-              {profile?.full_name || "Add your name"} ·{" "}
-              <span className="text-slate-500">Profile</span>
-            </p>
+            {profile?.bio && (
+              <p className="text-sm text-slate-400 mt-1">{profile.bio}</p>
+            )}
           </div>
         </section>
 
-        {/* Bio + Edit */}
-        <section className="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-3">
+        {/* My Photos */}
+        <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold">About you</h2>
-            <button
-              onClick={() => setIsEditing(true)}
-              className="text-xs px-3 py-1 rounded-full border border-slate-600 hover:border-slate-300 transition-colors"
-            >
-              Edit profile
-            </button>
+            <h2 className="text-lg font-semibold">My Photos</h2>
+            <span className="text-xs text-slate-400">
+              {myPhotos.length} photo{myPhotos.length === 1 ? "" : "s"}
+            </span>
           </div>
-          <p className="text-sm text-slate-300">
-            {profile?.bio || "Add a short bio so people know who’s behind your trips."}
-          </p>
-        </section>
 
-        {/* Placeholders */}
-        <section className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-xl bg-slate-900 border border-slate-800 p-4">
-            <h3 className="text-sm font-semibold mb-2">Your posts</h3>
-            <p className="text-xs text-slate-400">
-              Later this will show your map posts and long-form trips.
+          {myPhotos.length === 0 ? (
+            <p className="text-sm text-slate-400">
+              You haven’t posted any photos yet.
             </p>
-          </div>
-
-          <div className="rounded-xl bg-slate-900 border border-slate-800 p-4">
-            <h3 className="text-sm font-semibold mb-2">Your stories</h3>
-            <p className="text-xs text-slate-400">
-              Short-lived “snap” style stories will show up here when we build them.
-            </p>
-          </div>
-        </section>
-
-        <section className="rounded-xl bg-slate-900 border border-slate-800 p-4">
-          <h3 className="text-sm font-semibold mb-2">Saved & following</h3>
-          <p className="text-xs text-slate-400">
-            We’ll hook this up to your saved content, followers, and following once
-            those tables exist.
-          </p>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {myPhotos.map((photo) => (
+                <div
+                  key={photo.id}
+                  className="relative aspect-square rounded-lg overflow-hidden bg-slate-800"
+                >
+                  <Image
+                    src={photo.signedUrl}
+                    alt="My photo"
+                    fill
+                    className="object-cover"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       </div>
-
-      <EditProfileModal
-        open={isEditing}
-        onClose={() => setIsEditing(false)}
-        initialProfile={profile}
-        onSaved={(updated) => setProfile(updated)}
-      />
-    </main>
+    </div>
   );
 }

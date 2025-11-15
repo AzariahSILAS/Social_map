@@ -24,8 +24,4 @@ social-map
                   |---------info.tsx
 |....
 
-utils/supabase/info.ts
-
-
-export const projectId = "zqqqznarcxrwmyfzrfkq"
-export const publicAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpxcXF6bmFyY3hyd215ZnpyZmtxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzMTAwMDYsImV4cCI6MjA3Nzg4NjAwNn0.hsYcyJVYQ84kOa0WK7VjUFYKYzOmaGNV3w8Wbodn2rw"
+A bug that needs to be fixed is the when i try to add a photo to the map when im not logged in it gets stuck on the loading screen and the it makes the log in button stuck as well if i refresh the screen.

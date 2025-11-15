@@ -103,7 +103,7 @@ export default function AuthPage() {
   const isSignup = mode === "signup";
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-50 px-4">
+    <div className="h-full flex items-center justify-center bg-slate-950 text-slate-50 px-4">
       <div className="w-full max-w-md">
         {/* Optional: simple header to match the app */}
      

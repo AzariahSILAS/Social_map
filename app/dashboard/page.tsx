@@ -37,8 +37,8 @@ export default function DashboardPage() {
           const allPhotos = await photosAPI.getAll();
           if (!mounted) return;
           const mine = allPhotos.filter(
-            (photo) => photo.user_id === currentUser.id,
-          );
+  (photo) => photo.userId && photo.userId === currentUser.id,
+);
           setMyPhotos(mine);
         }
       } catch (err) {

@@ -213,7 +213,15 @@ const onTouchEnd = (e: React.TouchEvent) => {
         ref={containerRef}
         tabIndex={0}
         onKeyDown={onKeyDown}
-        className="min-h-[calc(100vh-56px-56px)] bg-black text-white outline-none overscroll-contain"
+        className="
+    h-[calc(100vh-56px-56px)]
+    w-full
+    bg-black
+    text-white
+    outline-none
+    overscroll-contain
+    overflow-hidden
+  "
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}

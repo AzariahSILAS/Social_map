@@ -161,35 +161,29 @@ export default function FeedPage() {
   }, []);
 
   // Touch handlers for swipe up/down
-  const onTouchStart = (e: React.TouchEvent) => {
-    touchEndY.current = null;
-    touchStartY.current = e.targetTouches[0].clientY;
-  };
+// Touch handlers for swipe up/down (no pull-to-refresh)
+const onTouchStart = (e: React.TouchEvent) => {
+  e.preventDefault();
+  touchEndY.current = null;
+  touchStartY.current = e.targetTouches[0].clientY;
+};
 
-  const onTouchMove = (e: React.TouchEvent) => {
-    touchEndY.current = e.targetTouches[0].clientY;
-  };
+const onTouchMove = (e: React.TouchEvent) => {
+  e.preventDefault();
+  touchEndY.current = e.targetTouches[0].clientY;
+};
 
-  const onTouchEnd = () => {
-    if (
-      touchStartY.current === null ||
-      touchEndY.current === null
-    ) {
-      return;
-    }
+const onTouchEnd = (e: React.TouchEvent) => {
+  e.preventDefault();
+  if (!touchStartY.current || !touchEndY.current) return;
 
-    const deltaY = touchEndY.current - touchStartY.current;
+  const deltaY = touchEndY.current - touchStartY.current;
+  if (Math.abs(deltaY) < THRESHOLD) return;
 
-    if (Math.abs(deltaY) < THRESHOLD) return;
+  if (deltaY < 0) goNext();
+  else goPrev();
+};
 
-    if (deltaY < 0) {
-      // swipe up → next
-      goNext();
-    } else {
-      // swipe down → previous
-      goPrev();
-    }
-  };
 
   // Optional: support arrow keys / PgUp / PgDn
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -216,14 +210,15 @@ export default function FeedPage() {
 
   return (
     <div
-      ref={containerRef}
-      tabIndex={0}
-      onKeyDown={onKeyDown}
-      className="h-full bg-black text-white outline-none"
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
-    >
+        ref={containerRef}
+        tabIndex={0}
+        onKeyDown={onKeyDown}
+        className="min-h-[calc(100vh-56px-56px)] bg-black text-white outline-none overscroll-contain"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        >
+
       {/* Loading / errors */}
       {loading && (
         <div className="flex h-full items-center justify-center">

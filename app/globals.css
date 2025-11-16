@@ -168,5 +168,10 @@ html { font-size: var(--font-size); }
   bottom: 60px !important;
 }
 
+html, body {
+  overscroll-behavior-y: none;
+}
+
+
 
 

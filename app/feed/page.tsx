@@ -219,7 +219,7 @@ export default function FeedPage() {
       ref={containerRef}
       tabIndex={0}
       onKeyDown={onKeyDown}
-      className="min-h-[calc(100vh-56px-56px)] bg-black text-white outline-none"
+      className="h-full bg-black text-white outline-none"
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}

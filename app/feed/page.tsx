@@ -256,45 +256,45 @@ export default function FeedPage() {
 
       {/* Main full-screen post */}
       {currentPhoto && (
-        <div className="relative h-full w-full overflow-hidden">
-          {/* Background image */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={currentPhoto.signedUrl}
-            alt="Post"
-            className="h-full w-full object-cover"
-          />
+  <div className="relative h-full w-full overflow-hidden bg-black">
+    {/* Centered image, scaled to fit */}
+    <div className="flex h-full w-full items-center justify-center">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={currentPhoto.signedUrl}
+        alt="Post"
+        className="max-h-full max-w-full object-contain"
+      />
+    </div>
 
-          {/* Gradient overlays */}
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/80 to-transparent" />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/80 to-transparent" />
+    {/* Gradient overlays (optional, keep if you like the text fade) */}
+    <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/80 to-transparent" />
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/80 to-transparent" />
 
-          {/* Top info */}
-          <div className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between px-4 pt-6 text-xs text-slate-200">
-            <span className="rounded-full bg-black/50 px-3 py-1">
-              {currentIndex + 1} / {photos.length}
-            </span>
-            {currentPhoto.distanceKm !== undefined && userLocation && (
-              <span className="rounded-full bg-black/50 px-3 py-1">
-                {displayDistance(currentPhoto)}
-              </span>
-            )}
-          </div>
-
-          {/* Bottom info (you can expand this later with username, caption, etc.) */}
-          <div className="absolute inset-x-0 bottom-0 z-10 px-4 pb-8">
-            <div className="flex flex-col gap-1 text-sm">
-              <span className="font-medium">
-                {/* placeholder for username later */}
-                Post #{currentIndex + 1}
-              </span>
-              <span className="text-xs text-slate-300">
-                Swipe up/down to see more posts nearby.
-              </span>
-            </div>
-          </div>
-        </div>
+    {/* Top info */}
+    <div className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between px-4 pt-6 text-xs text-slate-200">
+      <span className="rounded-full bg-black/50 px-3 py-1">
+        {currentIndex + 1} / {photos.length}
+      </span>
+      {currentPhoto.distanceKm !== undefined && userLocation && (
+        <span className="rounded-full bg-black/50 px-3 py-1">
+          {displayDistance(currentPhoto)}
+        </span>
       )}
+    </div>
+
+    {/* Bottom info */}
+    <div className="absolute inset-x-0 bottom-0 z-10 px-4 pb-8">
+      <div className="flex flex-col gap-1 text-sm">
+        <span className="font-medium">Post #{currentIndex + 1}</span>
+        <span className="text-xs text-slate-300">
+          Swipe up/down to see more posts nearby.
+        </span>
+      </div>
+    </div>
+  </div>
+)}
+
     </div>
   );
 }
